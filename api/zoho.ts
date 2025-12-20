@@ -98,8 +98,27 @@ export default async function handler(req: Request) {
       }
     }
 
+    // Fetch template to resolve the correct action_id for the requested role
+    const templateInfo = await fetch(`${cleanDomain}/api/v1/templates/${cleanTemplateId}`, {
+      method: 'GET',
+      headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+    });
+    if (!templateInfo.ok) {
+      const txt = await templateInfo.text();
+      return new Response(JSON.stringify({ error: 'Template fetch failed', message: txt }), { status: 400 });
+    }
+    const templateData = await templateInfo.json();
+    const actions = templateData?.templates?.actions || [];
+    const matchedAction = actions.find((a: any) => (a.role || '').trim().toLowerCase() === cleanRoleName.toLowerCase());
+    if (!matchedAction?.action_id) {
+      return new Response(JSON.stringify({
+        error: 'Role not found',
+        message: `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`
+      }), { status: 400 });
+    }
+
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
-    
+
     const payload = {
       templates: {
         request_name: isTest ? `TEST - ${new Date().toLocaleTimeString()}` : `Signature Request - ${signer.name}`,
@@ -108,7 +127,8 @@ export default async function handler(req: Request) {
             recipient_name: signer.name,
             recipient_email: signer.email,
             action_type: "SIGN",
-            role: cleanRoleName,
+            action_id: matchedAction.action_id,
+            role: matchedAction.role,
             verify_recipient: false,
             is_embedded: true
           }
