@@ -5,9 +5,11 @@ export interface FormDefinition {
   slug: string;
   templateId: string;
   roleName: string;
-  apiDomain: string;     // e.g. https://sign.zoho.com
-  accessToken?: string;  // Direct token (permanent key)
-  createdAt: number;
+  apiDomain: string;
+  accessToken: string; // holds refresh token
+  clientId?: string;
+  clientSecret?: string;
+  createdAt?: number | null;
 }
 
 export interface AdminAuth {

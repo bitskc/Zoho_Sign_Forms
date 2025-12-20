@@ -22,6 +22,8 @@ function toCamel(record: any) {
     roleName: record.role_name,
     apiDomain: record.api_domain,
     accessToken: record.access_token,
+    clientId: record.client_id,
+    clientSecret: record.client_secret,
     createdAt: record.created_at ? Date.parse(record.created_at as any) : null
   };
 }
@@ -35,7 +37,7 @@ export default async function handler(req: Request) {
     if (slug) {
       const { data, error } = await supabaseServer
         .from(table)
-        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
+        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,client_id,client_secret,created_at')
         .eq('slug', slug)
         .maybeSingle();
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
@@ -50,7 +52,7 @@ export default async function handler(req: Request) {
 
     const { data, error } = await supabaseServer
       .from(table)
-      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
+      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,client_id,client_secret,created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
@@ -73,6 +75,8 @@ export default async function handler(req: Request) {
       role_name: body.roleName,
       api_domain: body.apiDomain,
       access_token: body.accessToken,
+      client_id: body.clientId,
+      client_secret: body.clientSecret,
       // store as ISO for timestamptz column
       created_at: body.createdAt ? new Date(body.createdAt).toISOString() : new Date().toISOString()
     };

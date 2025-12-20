@@ -62,8 +62,11 @@ export default async function handler(req: Request) {
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken } = body;
-    if (!providedAccessToken && (!resolvedClientId || !resolvedClientSecret || !refreshToken)) {
+    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken, clientId: providedClientId, clientSecret: providedClientSecret } = body;
+    const effectiveClientId = providedClientId || resolvedClientId;
+    const effectiveClientSecret = providedClientSecret || resolvedClientSecret;
+
+    if (!providedAccessToken && (!effectiveClientId || !effectiveClientSecret || !refreshToken)) {
       return new Response(JSON.stringify({ 
         error: 'Missing credentials', 
         message: 'clientId/clientSecret must be set on the server and refreshToken provided unless you pass accessToken.' 
@@ -84,8 +87,8 @@ export default async function handler(req: Request) {
     if (!accessToken) {
       const refreshParams = new URLSearchParams();
       refreshParams.append('refresh_token', refreshToken);
-      refreshParams.append('client_id', resolvedClientId || '');
-      refreshParams.append('client_secret', resolvedClientSecret || '');
+      refreshParams.append('client_id', effectiveClientId || '');
+      refreshParams.append('client_secret', effectiveClientSecret || '');
       refreshParams.append('grant_type', 'refresh_token');
 
       try {

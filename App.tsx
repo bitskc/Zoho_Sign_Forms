@@ -34,6 +34,8 @@ const App: React.FC = () => {
   const [templateId, setTemplateId] = useState('');
   const [roleName, setRoleName] = useState('Signer 1');
   const [accessToken, setAccessToken] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
 
@@ -172,9 +174,11 @@ const App: React.FC = () => {
     setFormName('');
     setTemplateId('');
     setRoleName('Signer 1');
+    setAccessToken('');
+    setClientId('');
+    setClientSecret('');
     setApiDomain('https://sign.zoho.com');
     setSlug('');
-    setAccessToken('');
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -183,7 +187,9 @@ const App: React.FC = () => {
     setTemplateId(form.templateId);
     setRoleName(form.roleName);
     setAccessToken(form.accessToken || '');
-    setApiDomain(form.apiDomain);
+    setClientId(form.clientId || '');
+    setClientSecret(form.clientSecret || '');
+    setApiDomain(form.apiDomain || 'https://sign.zoho.com');
     setSlug(form.slug);
   };
 
@@ -193,15 +199,17 @@ const App: React.FC = () => {
       setError('Not authenticated');
       return;
     }
-    const newForm: FormDefinition = {
+    const formDef: FormDefinition = {
       id: editingId || crypto.randomUUID(),
       name: formName.trim(),
+      slug: slug.trim(),
       templateId: templateId.trim(),
-      roleName: roleName.trim() || "Signer 1",
-      apiDomain: apiDomain.trim() || 'https://sign.zoho.com',
-      slug: slug.trim() || formName.toLowerCase().replace(/\s+/g, '-'),
+      roleName: roleName.trim(),
+      apiDomain: apiDomain.trim(),
       accessToken: accessToken.trim(),
-      createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now()
+      clientId: clientId.trim(),
+      clientSecret: clientSecret.trim(),
+      createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now()
     };
     const res = await fetch('/api/forms', {
       method: 'POST',
@@ -209,7 +217,7 @@ const App: React.FC = () => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${sessionToken}`
       },
-      body: JSON.stringify(newForm)
+      body: JSON.stringify(formDef)
     });
     if (!res.ok) {
       const msg = await res.text();
@@ -338,7 +346,12 @@ const App: React.FC = () => {
                       <input required value={templateId} onChange={e => setTemplateId(e.target.value)} placeholder="Zoho Template ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
                       <input required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="Role (e.g. Signer 1)" className="w-full px-5 py-4 rounded-2xl text-sm font-bold outline-none" />
                     </div>
-                    <input required value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="Permanent Access Token" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-50" />
+                    <input required value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="Refresh Token" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-50" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <input required value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Zoho Client ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
+                      <input required value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Zoho Client Secret" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
+                    </div>
+                    <input required value={apiDomain} onChange={e => setApiDomain(e.target.value)} placeholder="API Domain (e.g. https://sign.zoho.com)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
                   </div>
 
                   <div className="bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-700/50">
