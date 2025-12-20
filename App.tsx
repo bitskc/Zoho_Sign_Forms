@@ -49,6 +49,21 @@ const App: React.FC = () => {
     setForms(data || []);
   };
 
+  const fetchFormBySlug = async (slugVal: string) => {
+    try {
+      const res = await fetch(`/api/forms?slug=${encodeURIComponent(slugVal)}`);
+      if (!res.ok) {
+        setView(ViewMode.NOT_FOUND);
+        return;
+      }
+      const data = await res.json();
+      setCurrentForm(data);
+      setView(ViewMode.PUBLIC_FORM);
+    } catch {
+      setView(ViewMode.NOT_FOUND);
+    }
+  };
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -59,7 +74,7 @@ const App: React.FC = () => {
           setCurrentForm(found);
           setView(ViewMode.PUBLIC_FORM);
         } else {
-          setView(ViewMode.NOT_FOUND);
+          fetchFormBySlug(slugVal);
         }
       } else if (hash === '#/admin/signup') {
         setAuthMode('signup');

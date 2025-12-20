@@ -27,14 +27,27 @@ function toCamel(record: any) {
 }
 
 export default async function handler(req: Request) {
-  const user = await getUserFromAuthHeader(req);
-  if (!user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
-
   const table = 'forms';
 
   if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const slug = url.searchParams.get('slug');
+    if (slug) {
+      const { data, error } = await supabaseServer
+        .from(table)
+        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+      if (!data) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+      return new Response(JSON.stringify(toCamel(data)), { status: 200 });
+    }
+
+    const user = await getUserFromAuthHeader(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const { data, error } = await supabaseServer
       .from(table)
       .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
@@ -45,6 +58,11 @@ export default async function handler(req: Request) {
   }
 
   if (req.method === 'POST') {
+    const user = await getUserFromAuthHeader(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const body = await req.json();
     const record = {
       id: body.id,
@@ -69,6 +87,11 @@ export default async function handler(req: Request) {
   }
 
   if (req.method === 'DELETE') {
+    const user = await getUserFromAuthHeader(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
     if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
