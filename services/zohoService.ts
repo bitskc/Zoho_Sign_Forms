@@ -12,8 +12,8 @@ export const triggerZohoSignTemplate = async (
   const endpoint = `/api/zoho`;
 
   try {
-    if (!form.clientId || !form.clientSecret || !form.refreshToken) {
-      if (form.id === 'demo-id' || !form.clientId) {
+    if (!form.accessToken) {
+      if (form.id === 'demo-id') {
         await new Promise(resolve => setTimeout(resolve, 1500));
         return {
           success: true,
@@ -28,9 +28,7 @@ export const triggerZohoSignTemplate = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         apiDomain: form.apiDomain,
-        clientId: form.clientId,
-        clientSecret: form.clientSecret,
-        refreshToken: form.refreshToken,
+        accessToken: form.accessToken,
         templateId: form.templateId, 
         roleName: form.roleName, 
         signer,

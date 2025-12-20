@@ -1,21 +1,23 @@
 
-export interface ZohoConfig {
-  adminPassword: string;
-}
-
 export interface FormDefinition {
   id: string;
   name: string;
   slug: string;
   templateId: string;
   roleName: string;
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-  redirectUri: string;   // New: Custom redirect URI to match Zoho Console
   apiDomain: string;     // e.g. https://sign.zoho.com
+  accessToken?: string;  // Direct token (permanent key)
   createdAt: number;
-  accessToken?: string;
+}
+
+export interface AdminAuth {
+  username: string;
+  password: string;
+}
+
+export interface ServerSettings {
+  admin: AdminAuth;
+  forms: FormDefinition[];
 }
 
 export interface SignerData {

@@ -60,11 +60,11 @@ export default async function handler(req: Request) {
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { templateId, signer, roleName, isTest } = body;
-    if (!clientId || !clientSecret || !refreshToken) {
+    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken } = body;
+    if (!providedAccessToken && (!clientId || !clientSecret || !refreshToken)) {
       return new Response(JSON.stringify({ 
         error: 'Missing credentials', 
-        message: 'clientId, clientSecret, and refreshToken are required.' 
+        message: 'clientId, clientSecret, and refreshToken are required unless you provide accessToken.' 
       }), { status: 400 });
     }
     if (!templateId || !signer?.name || !signer?.email) {
@@ -78,22 +78,24 @@ export default async function handler(req: Request) {
     const cleanTemplateId = (templateId || '').trim();
     const cleanRoleName = (roleName || "Signer 1").trim();
     
-    const refreshParams = new URLSearchParams();
-    refreshParams.append('refresh_token', refreshToken);
-    refreshParams.append('client_id', clientId);
-    refreshParams.append('client_secret', clientSecret);
-    refreshParams.append('grant_type', 'refresh_token');
+    let accessToken: string | undefined = providedAccessToken;
+    if (!accessToken) {
+      const refreshParams = new URLSearchParams();
+      refreshParams.append('refresh_token', refreshToken);
+      refreshParams.append('client_id', clientId);
+      refreshParams.append('client_secret', clientSecret);
+      refreshParams.append('grant_type', 'refresh_token');
 
-    let accessToken: string;
-    try {
-      const authData = await getOAuthToken(refreshParams, cleanDomain);
-      accessToken = authData.access_token;
-    } catch (authError: any) {
-      return new Response(JSON.stringify({ 
-        error: 'Authentication Failure', 
-        message: authError.message,
-        hint: "Your Refresh Token might be invalid or your Client ID/Secret do not match."
-      }), { status: 401 });
+      try {
+        const authData = await getOAuthToken(refreshParams, cleanDomain);
+        accessToken = authData.access_token;
+      } catch (authError: any) {
+        return new Response(JSON.stringify({ 
+          error: 'Authentication Failure', 
+          message: authError.message,
+          hint: "Your Refresh Token might be invalid or your Client ID/Secret do not match."
+        }), { status: 401 });
+      }
     }
 
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;

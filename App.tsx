@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewMode, FormDefinition, ZohoConfig, SignerData } from './types';
-import { storage } from './services/storageService';
-import { triggerZohoSignTemplate, testZohoConnection, exchangeToken } from './services/zohoService';
+import { ViewMode, FormDefinition, SignerData } from './types';
+import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
+import { supabase } from './services/supabaseClient';
 
 // Extend window for ZohoSign SDK
 declare global {
@@ -14,103 +14,130 @@ declare global {
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.PUBLIC_FORM);
   const [forms, setForms] = useState<FormDefinition[]>([]);
-  const [config, setConfig] = useState<ZohoConfig>(storage.getConfig());
+  const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [currentForm, setCurrentForm] = useState<FormDefinition | null>(null);
+  const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{requestId: string, signingUrl?: string} | null>(null);
-  
+
   // Test/Helper states
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{success: boolean, message: string, hint?: string} | null>(null);
-  const [helperVisible, setHelperVisible] = useState(false);
-  const [helperGrant, setHelperGrant] = useState('');
-  const [helperLoading, setHelperLoading] = useState(false);
 
   // Form editing states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [roleName, setRoleName] = useState('Signer 1');
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const defaultRedirect = typeof window !== 'undefined'
-    ? `${window.location.origin}/callback`
-    : 'https://zoho-sign-forms.vercel.app/callback';
-  const [redirectUri, setRedirectUri] = useState(defaultRedirect);
+  const [accessToken, setAccessToken] = useState('');
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
+
+  const fetchForms = async (token: string) => {
+    const res = await fetch('/api/forms', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      setForms([]);
+      return;
+    }
+    const data = await res.json();
+    setForms(data || []);
+  };
 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash.startsWith('#/f/')) {
         const slugVal = hash.replace('#/f/', '');
-        const allForms = storage.getForms();
-        const found = allForms.find(f => f.slug === slugVal);
+        const found = forms.find(f => f.slug === slugVal);
         if (found) {
           setCurrentForm(found);
           setView(ViewMode.PUBLIC_FORM);
         } else {
           setView(ViewMode.NOT_FOUND);
         }
-      } else if (hash === '#/admin') {
+      } else if (hash === '#/admin/signup') {
+        setAuthMode('signup');
         setView(ViewMode.ADMIN_LOGIN);
+      } else if (hash === '#/admin/login' || hash === '#/admin') {
+        setAuthMode('login');
+        setView(ViewMode.ADMIN_LOGIN);
+      } else if (hash === '#/admin/dashboard') {
+        setView(ViewMode.ADMIN_DASHBOARD);
       } else {
         setView(ViewMode.ADMIN_LOGIN);
+        window.location.hash = '#/admin/login';
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
     handleHashChange();
-    setForms(storage.getForms());
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setSessionToken(data.session.access_token);
+        setAuth({ username: data.session.user.email || '', password: '' });
+        window.location.hash = '#/admin/dashboard';
+        setView(ViewMode.ADMIN_DASHBOARD);
+        await fetchForms(data.session.access_token);
+      }
+    };
+    init();
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === config.adminPassword) {
-      setView(ViewMode.ADMIN_DASHBOARD);
-      setError(null);
-    } else {
-      setError("Incorrect password");
-    }
-  };
-
-  const getAccountsBaseUrl = (domain: string) => {
-    if (domain.includes('.eu')) return 'https://accounts.zoho.eu';
-    if (domain.includes('.in')) return 'https://accounts.zoho.in';
-    if (domain.includes('.com.au')) return 'https://accounts.zoho.com.au';
-    if (domain.includes('.jp')) return 'https://accounts.zoho.jp';
-    return 'https://accounts.zoho.com';
-  };
-
-  const getAuthUrl = () => {
-    const baseUrl = getAccountsBaseUrl(apiDomain);
-    const accountsUrl = `${baseUrl}/oauth/v2/auth`;
-    // Valid minimal scopes per Zoho docs: read templates + create docs + read docs
-    const scopes = 'ZohoSign.templates.READ,ZohoSign.documents.CREATE,ZohoSign.documents.READ';
-    const redirect = encodeURIComponent(redirectUri || 'https://api-console.zoho.com');
-    const scopeParam = encodeURIComponent(scopes);
-    return `${accountsUrl}?scope=${scopeParam}&client_id=${clientId}&state=signflow&response_type=code&redirect_uri=${redirect}&access_type=offline&prompt=consent`;
-  };
-
-  const handleExchange = async () => {
-    if (!clientId || !clientSecret || !helperGrant) {
-      alert("Need Client ID, Secret, and Grant Token (Code) to exchange.");
-      return;
-    }
-    setHelperLoading(true);
-    const res = await exchangeToken(clientId, clientSecret, helperGrant, apiDomain, redirectUri);
-    setHelperLoading(false);
-
-    if (res.refresh_token) {
-      setRefreshToken(res.refresh_token);
-      alert("Success! Refresh Token received and saved.");
-    } else {
-      alert(`Exchange Failed: ${res.error || 'Check your credentials and region.'}\n\nIMPORTANT: The Redirect URI in the form below MUST match what you put in the Zoho API Console exactly.`);
+    setLoading(true);
+    setError(null);
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email: usernameInput,
+          password: passwordInput
+        });
+        if (error) {
+          setError(error.message || 'Sign up failed');
+          setLoading(false);
+          return;
+        }
+        if (!data.session) {
+          setError('Check your email to confirm your account, then log in.');
+          setLoading(false);
+          setAuthMode('login');
+          return;
+        }
+        setSessionToken(data.session.access_token);
+        setAuth({ username: usernameInput, password: '' });
+        window.location.hash = '#/admin/dashboard';
+        setView(ViewMode.ADMIN_DASHBOARD);
+        await fetchForms(data.session.access_token);
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: usernameInput,
+          password: passwordInput
+        });
+        if (error || !data.session) {
+          setError(error?.message || 'Login failed');
+          setLoading(false);
+          return;
+        }
+        setSessionToken(data.session.access_token);
+        setAuth({ username: usernameInput, password: '' });
+        window.location.hash = '#/admin/dashboard';
+        setView(ViewMode.ADMIN_DASHBOARD);
+        await fetchForms(data.session.access_token);
+      }
+    } catch (err: any) {
+      console.error('Auth error', err);
+      setError(err?.message || 'Network error (failed to reach Supabase)');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -119,12 +146,9 @@ const App: React.FC = () => {
     setFormName('');
     setTemplateId('');
     setRoleName('Signer 1');
-    setClientId('');
-    setClientSecret('');
-    setRefreshToken('');
-    setRedirectUri(defaultRedirect);
     setApiDomain('https://sign.zoho.com');
     setSlug('');
+    setAccessToken('');
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -132,40 +156,55 @@ const App: React.FC = () => {
     setFormName(form.name);
     setTemplateId(form.templateId);
     setRoleName(form.roleName);
-    setClientId(form.clientId);
-    setClientSecret(form.clientSecret);
-    setRefreshToken(form.refreshToken);
-    setRedirectUri(form.redirectUri || 'https://api-console.zoho.com');
+    setAccessToken(form.accessToken || '');
     setApiDomain(form.apiDomain);
     setSlug(form.slug);
   };
 
-  const saveForm = (e: React.FormEvent) => {
+  const saveForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sessionToken) {
+      setError('Not authenticated');
+      return;
+    }
     const newForm: FormDefinition = {
       id: editingId || crypto.randomUUID(),
       name: formName.trim(),
       templateId: templateId.trim(),
       roleName: roleName.trim() || "Signer 1",
-      clientId: clientId.trim(),
-      clientSecret: clientSecret.trim(),
-      refreshToken: refreshToken.trim(),
-      redirectUri: redirectUri.trim() || 'https://api-console.zoho.com',
       apiDomain: apiDomain.trim() || 'https://sign.zoho.com',
       slug: slug.trim() || formName.toLowerCase().replace(/\s+/g, '-'),
+      accessToken: accessToken.trim(),
       createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now()
     };
-    let updated = editingId ? forms.map(f => f.id === editingId ? newForm : f) : [...forms, newForm];
+    const res = await fetch('/api/forms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionToken}`
+      },
+      body: JSON.stringify(newForm)
+    });
+    if (!res.ok) {
+      const msg = await res.text();
+      setError(`Save failed: ${msg}`);
+      return;
+    }
+    const saved = await res.json();
+    let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
-    storage.saveForms(updated);
     clearForm();
   };
 
-  const deleteForm = (id: string) => {
+  const deleteForm = async (id: string) => {
+    if (!sessionToken) return;
     if (confirm("Permanently delete this configuration?")) {
+      await fetch(`/api/forms?id=${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
       const updated = forms.filter(f => f.id !== id);
       setForms(updated);
-      storage.saveForms(updated);
     }
   };
 
@@ -208,13 +247,37 @@ const App: React.FC = () => {
       {view === ViewMode.ADMIN_LOGIN && (
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className="w-full max-w-md bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-200">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-[2rem] mb-6 text-white font-black text-4xl">S</div>
-              <h1 className="text-3xl font-black text-slate-800 tracking-tight">SignFlow Pro Login</h1>
+            <div className="text-center mb-8 space-y-3">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-[2rem] text-white font-black text-4xl shadow-lg shadow-blue-500/30">S</div>
+              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+                {authMode === 'login' ? 'Admin Login' : 'Create Admin Account'}
+              </h1>
+              <p className="text-sm text-slate-500 font-semibold">
+                Mode: <span className="text-blue-600 uppercase tracking-widest">{authMode}</span>
+              </p>
             </div>
-            <form onSubmit={handleAdminLogin} className="space-y-4">
-              <input type="password" autoFocus className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl text-center font-bold text-lg outline-none focus:ring-4 focus:ring-blue-500/10" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Admin Password" />
-              <button className="w-full bg-slate-900 text-white py-5 rounded-3xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl">Access Dashboard</button>
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <input type="email" autoFocus className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
+              <input type="password" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
+              {error && (
+                <div className="text-red-600 text-sm font-semibold bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center">
+                  {error}
+                </div>
+              )}
+              <button disabled={loading} className="w-full bg-slate-900 text-white py-4 rounded-3xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl disabled:opacity-60 disabled:cursor-not-allowed">
+                {loading ? 'Please wait…' : authMode === 'login' ? 'Access Dashboard' : 'Create Account'}
+              </button>
+              <div className="text-center text-xs text-slate-400">
+                {authMode === 'login' ? (
+                  <button type="button" onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setError(null); }} className="underline font-bold">
+                    Need an account? Sign up
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setError(null); }} className="underline font-bold">
+                    Already have an account? Log in
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>
@@ -249,63 +312,17 @@ const App: React.FC = () => {
                       <input required value={templateId} onChange={e => setTemplateId(e.target.value)} placeholder="Zoho Template ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
                       <input required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="Role (e.g. Signer 1)" className="w-full px-5 py-4 rounded-2xl text-sm font-bold outline-none" />
                     </div>
+                    <input required value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="Permanent Access Token" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-50" />
                   </div>
 
                   <div className="bg-slate-800/50 p-6 rounded-[2rem] space-y-4 border border-slate-700/50">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Zoho Credentials</label>
-                      <button type="button" onClick={() => setHelperVisible(!helperVisible)} className="text-[10px] font-black text-white/50 hover:text-white underline">
-                        {helperVisible ? 'Close Helper' : 'Get Refresh Token'}
-                      </button>
+                      <span className="text-[10px] font-black text-white/50">Access Token only</span>
                     </div>
-                    
-                    <input required value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Client ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
-                    <input required type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Client Secret" className="w-full px-5 py-4 rounded-2xl text-sm outline-none" />
-                    
-                    <div className="relative group">
-                      <input value={redirectUri} onChange={e => setRedirectUri(e.target.value)} placeholder="Redirect URI" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-700 text-slate-300 border border-slate-600 focus:border-blue-400" />
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-500 uppercase">Redirect URI</div>
-                      <div className="hidden group-hover:block absolute left-0 -top-12 bg-black text-white p-2 rounded text-[10px] w-full z-10 border border-slate-700 font-bold">
-                        Must MATCH exactly what you configured in the Zoho API Console.
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <input required value={refreshToken} onChange={e => setRefreshToken(e.target.value)} placeholder="Refresh Token (Exchange required first)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-blue-50/10 text-blue-200 border border-blue-500/30" />
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400 uppercase">Token</div>
-                    </div>
-
-                    {helperVisible && (
-                      <div className="mt-4 p-6 bg-blue-600 rounded-3xl animate-in zoom-in duration-300">
-                        <h4 className="text-white font-black text-sm mb-2">OAuth Helper</h4>
-                        <p className="text-[9px] text-blue-100 mb-4 font-bold opacity-80 leading-tight italic">Mismatch Fix: Ensure the Redirect URI above matches your Zoho Console setting.</p>
-                        
-                        <div className="space-y-4">
-                          <div className="bg-white/10 p-4 rounded-2xl">
-                            <p className="text-[10px] font-black text-blue-100 uppercase mb-2">Step 1: Get Grant Token</p>
-                            <button 
-                              type="button" 
-                              disabled={!clientId}
-                              onClick={() => window.open(getAuthUrl(), '_blank')}
-                              className="w-full bg-white text-blue-600 py-3 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors disabled:opacity-50 shadow-lg shadow-blue-900/20"
-                            >
-                              Authorize in Zoho
-                            </button>
-                            {!clientId && <p className="text-[9px] text-blue-200 mt-2 text-center font-bold">Client ID Required</p>}
-                          </div>
-
-                          <div className="bg-white/10 p-4 rounded-2xl">
-                            <p className="text-[10px] font-black text-blue-100 uppercase mb-2">Step 2: Exchange Code</p>
-                            <div className="flex gap-2">
-                              <input value={helperGrant} onChange={e => setHelperGrant(e.target.value)} placeholder="Paste 'code' here..." className="flex-1 px-3 py-2 rounded-lg text-xs bg-white text-slate-900 outline-none font-mono" />
-                              <button type="button" onClick={handleExchange} disabled={helperLoading} className="bg-slate-900 text-[10px] font-black px-4 rounded-lg hover:bg-black">
-                                {helperLoading ? '...' : 'EXCHANGE'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    <p className="text-[11px] text-slate-300">
+                      Paste your permanent Zoho Sign access token. No OAuth exchange required.
+                    </p>
                   </div>
 
                   <select value={apiDomain} onChange={e => setApiDomain(e.target.value)} className="w-full px-5 py-4 rounded-2xl text-sm font-bold outline-none bg-white appearance-none">

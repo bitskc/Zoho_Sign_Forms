@@ -1,9 +1,9 @@
 
-import { FormDefinition, ZohoConfig } from '../types';
+import { FormDefinition, AdminAuth } from '../types';
 
 const KEYS = {
   FORMS: 'signflow_forms',
-  CONFIG: 'signflow_config'
+  ADMIN: 'signflow_admin'
 };
 
 export const storage = {
@@ -14,13 +14,14 @@ export const storage = {
   saveForms: (forms: FormDefinition[]) => {
     localStorage.setItem(KEYS.FORMS, JSON.stringify(forms));
   },
-  getConfig: (): ZohoConfig => {
-    const data = localStorage.getItem(KEYS.CONFIG);
+  getAdmin: (): AdminAuth => {
+    const data = localStorage.getItem(KEYS.ADMIN);
     return data ? JSON.parse(data) : {
-      adminPassword: 'admin' // Default password
+      username: 'admin',
+      password: 'admin'
     };
   },
-  saveConfig: (config: ZohoConfig) => {
-    localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
+  saveAdmin: (admin: AdminAuth) => {
+    localStorage.setItem(KEYS.ADMIN, JSON.stringify(admin));
   }
 };
