@@ -1,6 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Accessing process.env.API_KEY directly. 
+// Note: Ensure your build tool (like Vite) is configured to define this variable.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
 
 export const verifySignerData = async (name: string, email: string) => {
