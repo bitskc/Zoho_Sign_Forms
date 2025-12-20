@@ -22,7 +22,7 @@ function toCamel(record: any) {
     roleName: record.role_name,
     apiDomain: record.api_domain,
     accessToken: record.access_token,
-    createdAt: record.created_at
+    createdAt: record.created_at ? Date.parse(record.created_at as any) : null
   };
 }
 
@@ -55,8 +55,8 @@ export default async function handler(req: Request) {
       role_name: body.roleName,
       api_domain: body.apiDomain,
       access_token: body.accessToken,
-      // use numeric timestamp to match bigint/int8 columns
-      created_at: body.createdAt || Date.now()
+      // store as ISO for timestamptz column
+      created_at: body.createdAt ? new Date(body.createdAt).toISOString() : new Date().toISOString()
     };
 
     const { data, error } = await supabaseServer
