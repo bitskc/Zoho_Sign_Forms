@@ -32,6 +32,8 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
   return data;
 }
 
+import { supabaseServer } from './_supabaseServer';
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
@@ -62,11 +64,29 @@ export default async function handler(req: Request) {
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken, clientId: providedClientId, clientSecret: providedClientSecret } = body;
-    const effectiveClientId = providedClientId || resolvedClientId;
-    const effectiveClientSecret = providedClientSecret || resolvedClientSecret;
+    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken, clientId: providedClientId, clientSecret: providedClientSecret, userId } = body;
 
-    if (!providedAccessToken && (!effectiveClientId || !effectiveClientSecret || !refreshToken)) {
+    let effectiveClientId = providedClientId || resolvedClientId;
+    let effectiveClientSecret = providedClientSecret || resolvedClientSecret;
+    let effectiveRefreshToken = refreshToken;
+    let effectiveApiDomain = apiDomain;
+
+    // If creds not provided, try to load from Supabase by userId
+    if ((!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken) && userId) {
+      const { data: credRow, error: credErr } = await supabaseServer
+        .from('user_credentials')
+        .select('zoho_client_id,zoho_client_secret,zoho_refresh_token,api_domain')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!credErr && credRow) {
+        effectiveClientId = effectiveClientId || credRow.zoho_client_id;
+        effectiveClientSecret = effectiveClientSecret || credRow.zoho_client_secret;
+        effectiveRefreshToken = effectiveRefreshToken || credRow.zoho_refresh_token;
+        effectiveApiDomain = effectiveApiDomain || credRow.api_domain;
+      }
+    }
+
+    if (!providedAccessToken && (!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken)) {
       return new Response(JSON.stringify({ 
         error: 'Missing credentials', 
         message: 'clientId/clientSecret must be set on the server and refreshToken provided unless you pass accessToken.' 
@@ -79,14 +99,14 @@ export default async function handler(req: Request) {
       }), { status: 400 });
     }
 
-    const cleanDomain = (apiDomain || 'https://sign.zoho.com').replace(/\/+$/, '').trim();
+    const cleanDomain = (effectiveApiDomain || 'https://sign.zoho.com').replace(/\/+$/, '').trim();
     const cleanTemplateId = (templateId || '').trim();
     const cleanRoleName = (roleName || "Signer 1").trim();
     
     let accessToken: string | undefined = providedAccessToken;
     if (!accessToken) {
       const refreshParams = new URLSearchParams();
-      refreshParams.append('refresh_token', refreshToken);
+      refreshParams.append('refresh_token', effectiveRefreshToken);
       refreshParams.append('client_id', effectiveClientId || '');
       refreshParams.append('client_secret', effectiveClientSecret || '');
       refreshParams.append('grant_type', 'refresh_token');

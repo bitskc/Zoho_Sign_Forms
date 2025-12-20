@@ -15,7 +15,7 @@ function toCamel(record: any) {
   if (!record) return record;
   return {
     id: record.id,
-    user_id: record.user_id,
+    userId: record.user_id,
     name: record.name,
     slug: record.slug,
     templateId: record.template_id,

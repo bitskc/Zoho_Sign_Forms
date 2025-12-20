@@ -1,13 +1,27 @@
 
 export interface FormDefinition {
   id: string;
+  userId?: string;
   name: string;
   slug: string;
   templateId: string;
   roleName: string;
   apiDomain: string;
-  accessToken: string; // holds refresh token
+  accessToken?: string; // deprecated; kept for backward compatibility
   createdAt?: number | null;
+}
+
+export interface UserCredentials {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  apiDomain?: string;
+}
+
+export interface SubscriptionPlan {
+  plan: string;
+  status: string;
+  seats?: number;
 }
 
 export interface AdminAuth {

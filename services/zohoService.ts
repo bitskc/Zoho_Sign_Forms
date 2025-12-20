@@ -4,10 +4,19 @@ import { SignerData, SubmissionResponse, FormDefinition } from '../types';
 /**
  * Standard trigger for public signature requests
  */
+type ZohoCreds = {
+  clientId?: string;
+  clientSecret?: string;
+  refreshToken?: string;
+  apiDomain?: string;
+  userId?: string;
+};
+
 export const triggerZohoSignTemplate = async (
   form: FormDefinition,
   signer: SignerData,
-  isTest: boolean = false
+  isTest: boolean = false,
+  creds?: ZohoCreds
 ): Promise<SubmissionResponse> => {
   const endpoint = `/api/zoho`;
 
@@ -27,9 +36,11 @@ export const triggerZohoSignTemplate = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        apiDomain: form.apiDomain,
-        // reuse stored accessToken field to hold the refresh token
-        refreshToken: form.accessToken,
+        apiDomain: creds?.apiDomain || form.apiDomain,
+        refreshToken: creds?.refreshToken,
+        clientId: creds?.clientId,
+        clientSecret: creds?.clientSecret,
+        userId: creds?.userId,
         templateId: form.templateId, 
         roleName: form.roleName, 
         signer,
@@ -96,10 +107,11 @@ export const exchangeToken = async (
 /**
  * Convenience wrapper for testing a connection
  */
-export const testZohoConnection = async (form: FormDefinition) => {
+export const testZohoConnection = async (form: FormDefinition, creds?: { clientId: string; clientSecret: string; refreshToken: string; apiDomain?: string; userId?: string }) => {
   return triggerZohoSignTemplate(
     form, 
     { name: "System Test", email: "test@example.com" },
-    true
+    true,
+    creds
   );
 };
