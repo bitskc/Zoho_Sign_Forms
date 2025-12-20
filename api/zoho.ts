@@ -12,30 +12,30 @@ export default async function handler(req: Request) {
     const body = await req.json();
     let { apiDomain, accessToken, templateId, signer, roleName, isTest } = body;
 
-    // Sanitize inputs
-    apiDomain = apiDomain.replace(/\/+$/, ''); // Remove trailing slashes
-    templateId = templateId.trim();
-    roleName = (roleName || "Signer 1").trim();
+    // 1. Critical Sanitization
+    const cleanDomain = (apiDomain || 'https://sign.zoho.com').replace(/\/+$/, '').trim();
+    const cleanTemplateId = (templateId || '').trim();
+    const cleanRoleName = (roleName || "Signer 1").trim();
+    const cleanToken = (accessToken || '').trim();
 
-    const endpoint = `${apiDomain}/api/v1/templates/${templateId}/requests`;
+    // UPDATED: Using /createdocument instead of /requests as suggested by documentation
+    const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
     
-    // Construct the Zoho payload
-    // Note: Some Zoho data centers require template_id both in URL and Body
+    // 2. Comprehensive Payload
     const payload = {
       templates: {
-        template_id: templateId,
+        template_id: cleanTemplateId,
         request_name: isTest ? `TEST - ${new Date().toLocaleTimeString()}` : `Signature Request - ${signer.name}`,
         actions: [
           {
             recipient_name: signer.name,
             recipient_email: signer.email,
             action_type: "SIGN",
-            role: roleName,
+            role: cleanRoleName,
             verify_recipient: false,
             is_embedded: true
           }
         ],
-        // Field data helps map placeholders in the template
         field_data: {
           "Signer Name": signer.name,
           "FullName": signer.name,
@@ -47,7 +47,7 @@ export default async function handler(req: Request) {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Zoho-oauthtoken ${accessToken}`,
+        'Authorization': `Zoho-oauthtoken ${cleanToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
@@ -61,9 +61,13 @@ export default async function handler(req: Request) {
       data = { error: "Non-JSON Response", raw: responseText };
     }
     
-    // Check for "No match found" specifically to add helpful debugging hints
-    if (response.status === 400 && (responseText.includes("No match found") || data.message?.includes("No match found"))) {
-      data.debug_hint = "Common causes for 'No match found': 1. Incorrect Template ID. 2. Role Name (e.g., '" + roleName + "') does not match the template exactly. 3. Incorrect API Domain (e.g., using .com for an .eu account).";
+    // 3. Intelligent Error Hinting for the new endpoint
+    if (response.status === 400 && (responseText.includes("No match found") || (data.message && data.message.includes("No match found")))) {
+      data.debug_hint = `ZOHO 400 ERROR: 'No match found' persists. 
+Verify:
+1. ROLE NAME: You used '${cleanRoleName}'. In your Zoho Template, click 'Edit' and check the 'Role Name' column exactly.
+2. DATA CENTER: Your domain is '${cleanDomain}'. If your account is in Europe, use sign.zoho.eu.
+3. PERMISSIONS: Ensure the API Token has 'ZohoSign.templates.READ' and 'ZohoSign.requests.CREATE' scopes.`;
     }
 
     return new Response(JSON.stringify(data), {
