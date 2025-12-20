@@ -140,7 +140,7 @@ export default async function handler(req: Request) {
              "Name": signer.name
           }
         },
-        notes: "Generated via SignFlow Pro"
+        notes: "Generated via SignFlow Pro - direct link"
       }
     };
 
