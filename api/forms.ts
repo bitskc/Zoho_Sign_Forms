@@ -11,6 +11,21 @@ async function getUserFromAuthHeader(req: Request) {
   return data.user;
 }
 
+function toCamel(record: any) {
+  if (!record) return record;
+  return {
+    id: record.id,
+    user_id: record.user_id,
+    name: record.name,
+    slug: record.slug,
+    templateId: record.template_id,
+    roleName: record.role_name,
+    apiDomain: record.api_domain,
+    accessToken: record.access_token,
+    createdAt: record.created_at
+  };
+}
+
 export default async function handler(req: Request) {
   const user = await getUserFromAuthHeader(req);
   if (!user) {
@@ -22,11 +37,11 @@ export default async function handler(req: Request) {
   if (req.method === 'GET') {
     const { data, error } = await supabaseServer
       .from(table)
-      .select('id,user_id,name,slug,templateId,roleName,apiDomain,accessToken,created_at')
+      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
-    return new Response(JSON.stringify(data || []), { status: 200 });
+    return new Response(JSON.stringify((data || []).map(toCamel)), { status: 200 });
   }
 
   if (req.method === 'POST') {
@@ -36,10 +51,10 @@ export default async function handler(req: Request) {
       user_id: user.id,
       name: body.name,
       slug: body.slug,
-      templateId: body.templateId,
-      roleName: body.roleName,
-      apiDomain: body.apiDomain,
-      accessToken: body.accessToken,
+      template_id: body.templateId,
+      role_name: body.roleName,
+      api_domain: body.apiDomain,
+      access_token: body.accessToken,
       // use numeric timestamp to match bigint/int8 columns
       created_at: body.createdAt || Date.now()
     };
@@ -50,7 +65,7 @@ export default async function handler(req: Request) {
       .select()
       .maybeSingle();
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
-    return new Response(JSON.stringify(data), { status: 200 });
+    return new Response(JSON.stringify(toCamel(data)), { status: 200 });
   }
 
   if (req.method === 'DELETE') {
