@@ -22,9 +22,9 @@ export default async function handler(req: Request) {
   if (req.method === 'GET') {
     const { data, error } = await supabaseServer
       .from(table)
-      .select('*')
+      .select('id,user_id,name,slug,templateId,roleName,apiDomain,accessToken,created_at')
       .eq('user_id', user.id)
-      .order('createdAt', { ascending: false });
+      .order('created_at', { ascending: false });
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
     return new Response(JSON.stringify(data || []), { status: 200 });
   }
@@ -41,7 +41,7 @@ export default async function handler(req: Request) {
       apiDomain: body.apiDomain,
       accessToken: body.accessToken,
       // use numeric timestamp to match bigint/int8 columns
-      createdAt: body.createdAt || Date.now()
+      created_at: body.createdAt || Date.now()
     };
 
     const { data, error } = await supabaseServer
