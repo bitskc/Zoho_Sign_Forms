@@ -57,11 +57,12 @@ const App: React.FC = () => {
     }
   };
 
-  const addForm = (name: string, templateId: string, slug: string) => {
+  const addForm = (name: string, templateId: string, roleName: string, slug: string) => {
     const newForm: FormDefinition = {
       id: crypto.randomUUID(),
       name,
       templateId,
+      roleName: roleName || "Signer 1",
       slug: slug || name.toLowerCase().replace(/\s+/g, '-'),
       createdAt: Date.now()
     };
@@ -80,7 +81,7 @@ const App: React.FC = () => {
     if (!currentForm) return;
     setLoading(true);
     setError(null);
-    const res = await triggerZohoSignTemplate(config, currentForm.templateId, signer);
+    const res = await triggerZohoSignTemplate(config, currentForm, signer);
     if (res.success) {
       setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
     } else {
@@ -172,6 +173,7 @@ const App: React.FC = () => {
                         storage.saveConfig(newCfg);
                       }}
                     />
+                    <p className="text-[10px] text-slate-400 mt-1">Tokens expire every hour. Ensure yours is fresh.</p>
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">API Domain</label>
@@ -187,29 +189,31 @@ const App: React.FC = () => {
                       }}
                     />
                   </div>
-                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                      <strong>CORS FIX:</strong> Requests are now routed through <code>/api/zoho</code> to bypass browser security policies.
-                    </p>
-                  </div>
                 </div>
               </div>
 
               <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-xl">
-                <h3 className="font-bold mb-2">Create New Form</h3>
+                <h3 className="font-bold mb-2 text-blue-400">Create New Form</h3>
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   const target = e.target as any;
-                  addForm(target.fname.value, target.tid.value, target.fslug.value);
+                  addForm(target.fname.value, target.tid.value, target.frole.value, target.fslug.value);
                   target.reset();
                 }} className="space-y-3 mt-4 text-slate-900">
                   <input required name="fname" placeholder="Form Name (e.g. Sales Contract)" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
                   <input required name="tid" placeholder="Zoho Template ID" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
+                  <div className="relative">
+                    <input required name="frole" placeholder="Role Name (Check Zoho Template)" className="w-full px-4 py-2 rounded-lg text-sm outline-none border-2 border-blue-500/30" defaultValue="Signer 1" />
+                    <div className="absolute -top-2 right-2 bg-blue-600 text-[8px] font-bold px-1 rounded text-white">REQUIRED</div>
+                  </div>
                   <input name="fslug" placeholder="URL Slug (Optional)" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
                   <button className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-500 transition-colors">
                     Generate Form
                   </button>
                 </form>
+                <p className="text-[10px] text-slate-400 mt-4 leading-relaxed">
+                  <strong>Tip:</strong> The "Role Name" must exactly match the role defined in your Zoho Sign template for the API to work.
+                </p>
               </div>
             </div>
 
@@ -218,7 +222,7 @@ const App: React.FC = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Form Name</th>
+                      <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Form Details</th>
                       <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Public Link</th>
                       <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Actions</th>
                     </tr>
@@ -228,7 +232,10 @@ const App: React.FC = () => {
                       <tr key={form.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="font-bold text-slate-700">{form.name}</p>
-                          <p className="text-[10px] text-slate-400">TEMPLATE ID: {form.templateId}</p>
+                          <div className="flex gap-2 mt-1">
+                             <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">ID: {form.templateId}</span>
+                             <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter">ROLE: {form.roleName}</span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -308,25 +315,28 @@ const App: React.FC = () => {
 
                   {error && (
                     <div className="p-4 bg-red-50 rounded-xl border border-red-100">
-                      <p className="text-red-600 text-xs font-bold uppercase mb-1">Error</p>
-                      <p className="text-red-500 text-sm font-medium">{error}</p>
+                      <p className="text-red-600 text-[10px] font-black uppercase mb-1 tracking-widest">Zoho API Rejection</p>
+                      <p className="text-red-500 text-xs font-mono break-words leading-relaxed">{error}</p>
+                      <div className="mt-2 text-[10px] text-red-400 italic">
+                        Check your Role Name and Access Token in Admin.
+                      </div>
                     </div>
                   )}
 
                   <button 
                     disabled={loading}
-                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center shadow-xl shadow-blue-200"
+                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center shadow-xl shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
                       <div className="flex items-center gap-3">
                         <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <span>Preparing Document...</span>
+                        <span>Processing...</span>
                       </div>
                     ) : "Start Signing"}
                   </button>
                 </form>
                 <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-4 grayscale opacity-50">
-                   <span className="text-[10px] font-bold tracking-widest text-slate-400">POWERED BY ZOHO SIGN API</span>
+                   <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">Secure Bridge Active</span>
                 </div>
               </div>
             ) : (
@@ -349,7 +359,7 @@ const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-left">
-                    <p className="text-slate-600 text-sm">An email has been sent with the signature invitation. Please check your inbox.</p>
+                    <p className="text-slate-600 text-sm font-medium">An email has been sent with the signature invitation. Please check your inbox.</p>
                   </div>
                 )}
                 

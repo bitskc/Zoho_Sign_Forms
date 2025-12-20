@@ -10,6 +10,7 @@ export interface FormDefinition {
   name: string;
   slug: string;
   templateId: string;
+  roleName: string; // Added field
   createdAt: number;
 }
 
