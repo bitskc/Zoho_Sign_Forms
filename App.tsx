@@ -103,6 +103,17 @@ const App: React.FC = () => {
       }
     };
     init();
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.access_token) {
+        setSessionToken(session.access_token);
+        setAuth({ username: session.user.email || '', password: '' });
+        await fetchForms(session.access_token);
+      } else {
+        setSessionToken(null);
+        setForms([]);
+        setView(ViewMode.ADMIN_LOGIN);
+      }
+    });
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
