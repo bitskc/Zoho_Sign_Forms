@@ -4,6 +4,13 @@ import { ViewMode, FormDefinition, ZohoConfig, SignerData } from './types';
 import { storage } from './services/storageService';
 import { triggerZohoSignTemplate } from './services/zohoService';
 
+// Extend window for ZohoSign SDK
+declare global {
+  interface Window {
+    ZohoSign: any;
+  }
+}
+
 const App: React.FC = () => {
   const [view, setView] = useState<ViewMode>(ViewMode.PUBLIC_FORM);
   const [forms, setForms] = useState<FormDefinition[]>([]);
@@ -14,7 +21,6 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{requestId: string, signingUrl?: string} | null>(null);
 
-  // Sync with URL hash for simple routing
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -31,7 +37,6 @@ const App: React.FC = () => {
       } else if (hash === '#/admin') {
         setView(ViewMode.ADMIN_LOGIN);
       } else {
-        // Default to admin login if no form specified for this demo
         setView(ViewMode.ADMIN_LOGIN);
       }
     };
@@ -79,9 +84,20 @@ const App: React.FC = () => {
     if (res.success) {
       setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
     } else {
-      setError(res.error || "Submission failed");
+      setError(res.error || "Submission failed. Please check your admin configuration.");
     }
     setLoading(false);
+  };
+
+  const openZohoSign = (url: string) => {
+    if (window.ZohoSign) {
+      const zsign = new window.ZohoSign();
+      zsign.signDocument({
+        "signing_url": url
+      });
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   return (
@@ -121,7 +137,14 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-black text-slate-900">SignFlow Dashboard</h1>
-              <p className="text-slate-500">Manage your custom signature forms</p>
+              <div className="flex items-center gap-2 text-xs font-bold mt-1">
+                <span className="text-green-500 flex items-center gap-1">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  API BRIDGE ACTIVE
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-400">VERCEL DEPLOYMENT MODE</span>
+              </div>
             </div>
             <button 
               onClick={() => setView(ViewMode.ADMIN_LOGIN)}
@@ -136,33 +159,43 @@ const App: React.FC = () => {
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                 <h3 className="font-bold text-slate-800 mb-4">Global Config</h3>
                 <div className="space-y-3">
-                  <input 
-                    type="password" 
-                    placeholder="Zoho Access Token"
-                    className="w-full px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg"
-                    value={config.accessToken}
-                    onChange={e => {
-                      const newCfg = {...config, accessToken: e.target.value};
-                      setConfig(newCfg);
-                      storage.saveConfig(newCfg);
-                    }}
-                  />
-                  <input 
-                    type="text" 
-                    placeholder="API Domain"
-                    className="w-full px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg"
-                    value={config.apiDomain}
-                    onChange={e => {
-                      const newCfg = {...config, apiDomain: e.target.value};
-                      setConfig(newCfg);
-                      storage.saveConfig(newCfg);
-                    }}
-                  />
-                  <p className="text-[10px] text-slate-400 leading-tight">Changes are saved automatically to your local browser storage.</p>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Zoho OAuth Token</label>
+                    <input 
+                      type="password" 
+                      placeholder="Enter Access Token"
+                      className="w-full px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100"
+                      value={config.accessToken}
+                      onChange={e => {
+                        const newCfg = {...config, accessToken: e.target.value};
+                        setConfig(newCfg);
+                        storage.saveConfig(newCfg);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">API Domain</label>
+                    <input 
+                      type="text" 
+                      placeholder="https://sign.zoho.com"
+                      className="w-full px-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-100"
+                      value={config.apiDomain}
+                      onChange={e => {
+                        const newCfg = {...config, apiDomain: e.target.value};
+                        setConfig(newCfg);
+                        storage.saveConfig(newCfg);
+                      }}
+                    />
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
+                      <strong>CORS FIX:</strong> Requests are now routed through <code>/api/zoho</code> to bypass browser security policies.
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-blue-600 p-6 rounded-2xl text-white shadow-lg shadow-blue-100">
+              <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-xl">
                 <h3 className="font-bold mb-2">Create New Form</h3>
                 <form onSubmit={(e) => {
                   e.preventDefault();
@@ -170,10 +203,10 @@ const App: React.FC = () => {
                   addForm(target.fname.value, target.tid.value, target.fslug.value);
                   target.reset();
                 }} className="space-y-3 mt-4 text-slate-900">
-                  <input required name="fname" placeholder="Form Name" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
+                  <input required name="fname" placeholder="Form Name (e.g. Sales Contract)" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
                   <input required name="tid" placeholder="Zoho Template ID" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
                   <input name="fslug" placeholder="URL Slug (Optional)" className="w-full px-4 py-2 rounded-lg text-sm outline-none" />
-                  <button className="w-full bg-white text-blue-600 font-bold py-2 rounded-lg hover:bg-blue-50 transition-colors">
+                  <button className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-500 transition-colors">
                     Generate Form
                   </button>
                 </form>
@@ -195,7 +228,7 @@ const App: React.FC = () => {
                       <tr key={form.id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="font-bold text-slate-700">{form.name}</p>
-                          <p className="text-[10px] text-slate-400">ID: {form.templateId}</p>
+                          <p className="text-[10px] text-slate-400">TEMPLATE ID: {form.templateId}</p>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -225,7 +258,7 @@ const App: React.FC = () => {
                     {forms.length === 0 && (
                       <tr>
                         <td colSpan={3} className="px-6 py-12 text-center text-slate-400">
-                          No forms created yet. Use the panel on the left to start.
+                          No forms created yet. Add your first template on the left.
                         </td>
                       </tr>
                     )}
@@ -244,7 +277,7 @@ const App: React.FC = () => {
               <div className="bg-white p-10 rounded-3xl shadow-2xl border border-slate-200">
                 <div className="text-center mb-8">
                   <h1 className="text-3xl font-black text-slate-900 mb-2">{currentForm.name}</h1>
-                  <p className="text-slate-500">Please provide your details to initiate the document signature.</p>
+                  <p className="text-slate-500">Sign the document instantly in your browser.</p>
                 </div>
                 
                 <form onSubmit={(e) => {
@@ -258,7 +291,7 @@ const App: React.FC = () => {
                       required
                       name="signerName"
                       type="text" 
-                      placeholder="Jane Doe"
+                      placeholder="Your Name"
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     />
                   </div>
@@ -268,57 +301,63 @@ const App: React.FC = () => {
                       required
                       name="signerEmail"
                       type="email" 
-                      placeholder="jane@company.com"
+                      placeholder="your.email@example.com"
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     />
                   </div>
 
-                  {error && <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-xl border border-red-100">{error}</p>}
+                  {error && (
+                    <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                      <p className="text-red-600 text-xs font-bold uppercase mb-1">Error</p>
+                      <p className="text-red-500 text-sm font-medium">{error}</p>
+                    </div>
+                  )}
 
                   <button 
                     disabled={loading}
                     className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center shadow-xl shadow-blue-200"
                   >
                     {loading ? (
-                      <svg className="animate-spin h-6 w-6 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    ) : "Sign Document"}
+                      <div className="flex items-center gap-3">
+                        <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span>Preparing Document...</span>
+                      </div>
+                    ) : "Start Signing"}
                   </button>
                 </form>
-                <p className="mt-8 text-center text-slate-400 text-xs">Securely processed via Zoho Sign Integration</p>
+                <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-4 grayscale opacity-50">
+                   <span className="text-[10px] font-bold tracking-widest text-slate-400">POWERED BY ZOHO SIGN API</span>
+                </div>
               </div>
             ) : (
               <div className="bg-white p-12 rounded-3xl shadow-2xl border border-slate-200 text-center animate-in zoom-in duration-300">
                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
                   <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>
-                <h2 className="text-3xl font-black text-slate-900 mb-2">Request Successful!</h2>
-                <p className="text-slate-500 mb-8">Your document is ready to be signed.</p>
+                <h2 className="text-3xl font-black text-slate-900 mb-2">Ready to Sign!</h2>
+                <p className="text-slate-500 mb-8">The document has been prepared for your signature.</p>
                 
                 {successData.signingUrl ? (
                   <div className="space-y-4">
-                    <p className="text-sm font-medium text-slate-600">You can sign the document immediately using the button below:</p>
-                    <a 
-                      href={successData.signingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block w-full bg-green-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-green-700 transition-all shadow-xl shadow-green-100"
+                    <button 
+                      onClick={() => openZohoSign(successData.signingUrl!)}
+                      className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
                     >
-                      Sign Now
-                    </a>
-                    <p className="text-xs text-slate-400">Alternatively, check your email for the signature invitation link.</p>
+                      Open Document
+                    </button>
+                    <p className="text-xs text-slate-400">An email has also been sent to your inbox.</p>
                   </div>
                 ) : (
                   <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-left">
-                    <p className="text-slate-600 text-sm">An email has been sent to the address provided with instructions to complete the signature.</p>
-                    <p className="mt-2 text-[10px] font-mono text-slate-400 uppercase tracking-widest">ID: {successData.requestId}</p>
+                    <p className="text-slate-600 text-sm">An email has been sent with the signature invitation. Please check your inbox.</p>
                   </div>
                 )}
                 
                 <button 
                   onClick={() => setSuccessData(null)}
-                  className="mt-8 text-blue-600 font-bold hover:underline"
+                  className="mt-8 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm"
                 >
-                  Go Back
+                  Start Over
                 </button>
               </div>
             )}
@@ -331,8 +370,8 @@ const App: React.FC = () => {
           <div>
             <h1 className="text-6xl font-black text-slate-200 mb-4">404</h1>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Form Not Found</h2>
-            <p className="text-slate-500 mb-6">The link you followed may be broken or expired.</p>
-            <a href="#/admin" className="text-blue-600 font-bold hover:underline">Return to Admin</a>
+            <p className="text-slate-500 mb-6">This form may have been removed by an administrator.</p>
+            <a href="#/admin" className="text-blue-600 font-bold hover:underline">Return to Dashboard</a>
           </div>
         </div>
       )}
