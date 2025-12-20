@@ -40,7 +40,8 @@ export default async function handler(req: Request) {
       roleName: body.roleName,
       apiDomain: body.apiDomain,
       accessToken: body.accessToken,
-      createdAt: body.createdAt || new Date().toISOString()
+      // use numeric timestamp to match bigint/int8 columns
+      createdAt: body.createdAt || Date.now()
     };
 
     const { data, error } = await supabaseServer
