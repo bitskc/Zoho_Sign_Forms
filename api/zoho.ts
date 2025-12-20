@@ -130,7 +130,8 @@ export default async function handler(req: Request) {
             action_id: matchedAction.action_id,
             role: matchedAction.role,
             verify_recipient: false,
-            is_embedded: false
+            // embedded signing typically suppresses Zoho emails; we still surface the signing_url to open directly
+            is_embedded: true
           }
         ],
         field_data: {
