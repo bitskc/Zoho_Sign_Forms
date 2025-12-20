@@ -1,0 +1,7 @@
+{
+  "name": "SignFlow Pro",
+  "description": "A streamlined Zoho Sign template integration portal. Easily collect names and emails to trigger document signatures via the Zoho Sign API.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
