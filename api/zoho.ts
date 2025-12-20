@@ -130,8 +130,7 @@ export default async function handler(req: Request) {
             action_id: matchedAction.action_id,
             role: matchedAction.role,
             verify_recipient: false,
-            is_embedded: false,
-            delivery_mode: "link" // avoid sending email, return link instead
+            is_embedded: false
           }
         ],
         field_data: {
