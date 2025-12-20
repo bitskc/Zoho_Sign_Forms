@@ -36,7 +36,10 @@ const App: React.FC = () => {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
-  const [redirectUri, setRedirectUri] = useState('https://api-console.zoho.com');
+  const defaultRedirect = typeof window !== 'undefined'
+    ? `${window.location.origin}/callback`
+    : 'https://zoho-sign-forms.vercel.app/callback';
+  const [redirectUri, setRedirectUri] = useState(defaultRedirect);
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
 
@@ -87,9 +90,11 @@ const App: React.FC = () => {
   const getAuthUrl = () => {
     const baseUrl = getAccountsBaseUrl(apiDomain);
     const accountsUrl = `${baseUrl}/oauth/v2/auth`;
-    const scopes = 'ZohoSign.templates.READ,ZohoSign.requests.CREATE,ZohoSign.templates.CREATE,ZohoSign.requests.READ';
+    // Valid minimal scopes per Zoho docs: read templates + create docs + read docs
+    const scopes = 'ZohoSign.templates.READ,ZohoSign.documents.CREATE,ZohoSign.documents.READ';
     const redirect = encodeURIComponent(redirectUri || 'https://api-console.zoho.com');
-    return `${accountsUrl}?scope=${scopes}&client_id=${clientId}&state=signflow&response_type=code&redirect_uri=${redirect}&access_type=offline&prompt=consent`;
+    const scopeParam = encodeURIComponent(scopes);
+    return `${accountsUrl}?scope=${scopeParam}&client_id=${clientId}&state=signflow&response_type=code&redirect_uri=${redirect}&access_type=offline&prompt=consent`;
   };
 
   const handleExchange = async () => {
@@ -117,7 +122,7 @@ const App: React.FC = () => {
     setClientId('');
     setClientSecret('');
     setRefreshToken('');
-    setRedirectUri('https://api-console.zoho.com');
+    setRedirectUri(defaultRedirect);
     setApiDomain('https://sign.zoho.com');
     setSlug('');
   };
