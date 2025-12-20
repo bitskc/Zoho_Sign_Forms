@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{requestId: string, signingUrl?: string} | null>(null);
+  const [darkMode, setDarkMode] = useState(true);
 
   // Test/Helper states
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -161,6 +162,8 @@ const App: React.FC = () => {
         setView(ViewMode.ADMIN_LOGIN);
       } else if (hash === '#/admin/dashboard') {
         setView(ViewMode.ADMIN_DASHBOARD);
+      } else if (hash === '#/admin/settings') {
+        setView(ViewMode.ADMIN_SETTINGS);
       } else {
         setView(ViewMode.ADMIN_LOGIN);
         window.location.hash = '#/admin/login';
@@ -367,25 +370,33 @@ const App: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {view === ViewMode.ADMIN_LOGIN && (
         <div className="flex items-center justify-center min-h-screen p-6">
-          <div className="w-full max-w-md bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-200">
+          <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-900 border-slate-200'} p-10 rounded-[3rem] shadow-2xl border`}>
             <div className="text-center mb-8 space-y-3">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-[2rem] text-white font-black text-4xl shadow-lg shadow-blue-500/30">S</div>
-              <h1 className="text-3xl font-black text-slate-800 tracking-tight">
+              <div className={`inline-flex items-center justify-center w-20 h-20 ${darkMode ? 'bg-slate-800 text-white' : 'bg-blue-600 text-white'} rounded-[2rem] font-black text-4xl shadow-lg shadow-blue-500/30`}>S</div>
+              <h1 className="text-3xl font-black tracking-tight">
                 {authMode === 'login' ? 'Admin Login' : 'Create Admin Account'}
               </h1>
-              <p className="text-sm text-slate-500 font-semibold">
-                Mode: <span className="text-blue-600 uppercase tracking-widest">{authMode}</span>
+              <p className={`text-sm font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Mode: <span className={`${darkMode ? 'text-blue-300' : 'text-blue-600'} uppercase tracking-widest`}>{authMode}</span>
               </p>
             </div>
             <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <input type="email" autoFocus className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
-              <input type="password" className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
+              <input type="email" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
+              <input type="password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
               {error && (
-                <div className="text-red-600 text-sm font-semibold bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-center">
+                <div className={`text-sm font-semibold rounded-2xl px-4 py-3 text-center ${darkMode ? 'text-red-300 bg-red-950 border border-red-900' : 'text-red-600 bg-red-50 border border-red-200'}`}>
                   {error}
                 </div>
               )}
@@ -418,13 +429,19 @@ const App: React.FC = () => {
                   <p className="text-slate-500 text-xs font-semibold uppercase tracking-[0.2em]">Admin · Integrations</p>
                </div>
             </div>
-            <button onClick={() => setView(ViewMode.ADMIN_LOGIN)} className="px-6 py-2.5 rounded-lg border border-slate-200 text-xs font-black text-slate-500 hover:text-red-500 transition-all uppercase tracking-widest">Logout</button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setDarkMode(!darkMode)} className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-all uppercase tracking-widest">
+                {darkMode ? 'Light Mode' : 'Dark Mode'}
+              </button>
+              <button onClick={() => { window.location.hash = '#/admin/settings'; setView(ViewMode.ADMIN_SETTINGS); }} className="px-4 py-2 rounded-lg border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-all uppercase tracking-widest">Settings</button>
+              <button onClick={() => setView(ViewMode.ADMIN_LOGIN)} className="px-6 py-2.5 rounded-lg border border-slate-200 text-xs font-black text-slate-500 hover:text-red-500 transition-all uppercase tracking-widest">Logout</button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Form Editor */}
             <div className="lg:col-span-5">
-              <div className="bg-white border border-slate-200 p-8 rounded-2xl shadow-lg sticky top-8">
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} p-8 rounded-2xl shadow-lg sticky top-8`}>
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="font-black text-2xl text-slate-900">{editingId ? "Edit" : "New"} Integration</h3>
                   {editingId && <button onClick={clearForm} className="text-[10px] bg-slate-100 px-3 py-1.5 rounded-md font-black text-slate-600 border border-slate-200">Cancel</button>}
@@ -475,17 +492,17 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} rounded-2xl shadow-sm overflow-hidden border`}>
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50/50 border-b border-slate-100">
+                  <thead className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50/50 border-slate-100'}`}>
                     <tr>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Portal Name</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Control</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className={`${darkMode ? 'divide-slate-800' : 'divide-slate-100'} divide-y`}>
                     {forms.map(form => (
-                      <tr key={form.id} className="hover:bg-slate-50/50 transition-colors">
+                      <tr key={form.id} className={`transition-colors ${darkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50/50'}`}>
                         <td className="px-6 py-6">
                           <p className="font-black text-slate-800 text-lg mb-1">{form.name}</p>
                           <div className="flex flex-wrap gap-2 mb-3">
@@ -504,11 +521,11 @@ const App: React.FC = () => {
                         </td>
                         <td className="px-6 py-6">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => runConnectionTest(form)} disabled={testingId === form.id} className="p-3 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm">
+                            <button onClick={() => runConnectionTest(form)} disabled={testingId === form.id} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-green-900 text-green-200 hover:bg-green-600 hover:text-white' : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'}`}>
                                {testingId === form.id ? <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
                             </button>
-                            <button onClick={() => startEdit(form)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                            <button onClick={() => deleteForm(form.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            <button onClick={() => startEdit(form)} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-blue-900 text-blue-200 hover:bg-blue-600 hover:text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                            <button onClick={() => deleteForm(form.id)} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-red-900 text-red-200 hover:bg-red-600 hover:text-white' : 'bg-red-50 text-red-500 hover:bg-red-600 hover:text-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                           </div>
                         </td>
                       </tr>
@@ -520,62 +537,80 @@ const App: React.FC = () => {
                 </table>
               </div>
 
-              {/* Account-level Credentials and Subscription */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500 font-black">Zoho Account Settings</p>
-                      <h3 className="text-xl font-black text-slate-900">Client & Token</h3>
-                    </div>
-                    {!credentialsLoaded && <span className="text-xs text-slate-400">Loading…</span>}
-                  </div>
-                  <div className="space-y-4">
-                    <input value={credClientId} onChange={e => setCredClientId(e.target.value)} placeholder="Client ID" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
-                    <input type="password" value={credClientSecret} onChange={e => setCredClientSecret(e.target.value)} placeholder="Client Secret" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
-                    <input value={credRefreshToken} onChange={e => setCredRefreshToken(e.target.value)} placeholder="Refresh Token" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
-                    <input value={credApiDomain} onChange={e => setCredApiDomain(e.target.value)} placeholder="API Domain (https://sign.zoho.com)" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
-                    <button onClick={saveCredentials} className="w-full bg-slate-900 text-white py-3 rounded-lg font-black text-sm hover:bg-slate-800">Save Credentials</button>
-                  </div>
-                </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500 font-black">Subscription</p>
-                      <h3 className="text-xl font-black text-slate-900">Plan & Status</h3>
-                    </div>
-                    {!subscriptionLoaded && <span className="text-xs text-slate-400">Loading…</span>}
-                  </div>
-                  <div className="space-y-3">
-                    <select
-                      value={subscription?.plan || 'free'}
-                      onChange={e => saveSubscription(e.target.value, subscription?.status || 'active', subscription?.seats)}
-                      className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
-                    >
-                      <option value="free">Free</option>
-                      <option value="pro">Pro</option>
-                      <option value="enterprise">Enterprise</option>
-                    </select>
-                    <select
-                      value={subscription?.status || 'active'}
-                      onChange={e => saveSubscription(subscription?.plan || 'free', e.target.value, subscription?.seats)}
-                      className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
-                    >
-                      <option value="active">Active</option>
-                      <option value="past_due">Past Due</option>
-                      <option value="canceled">Canceled</option>
-                    </select>
-                    <input
-                      type="number"
-                      min={1}
-                      value={subscription?.seats ?? 1}
-                      onChange={e => saveSubscription(subscription?.plan || 'free', subscription?.status || 'active', Number(e.target.value))}
-                      className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
-                      placeholder="Seats"
-                    />
-                  </div>
+      {view === ViewMode.ADMIN_SETTINGS && (
+        <div className="max-w-5xl mx-auto p-6 lg:p-12">
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-slate-700/30">S</div>
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">Account Settings</h1>
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-[0.2em]">Credentials · Subscription</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { window.location.hash = '#/admin/dashboard'; setView(ViewMode.ADMIN_DASHBOARD); }} className="px-5 py-2 rounded-lg border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-all uppercase tracking-widest">Back to Dashboard</button>
+              <button onClick={() => setView(ViewMode.ADMIN_LOGIN)} className="px-5 py-2 rounded-lg border border-slate-200 text-xs font-black text-slate-500 hover:text-red-500 transition-all uppercase tracking-widest">Logout</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500 font-black">Zoho Account Settings</p>
+                  <h3 className="text-xl font-black text-slate-900">Client & Token</h3>
                 </div>
+                {!credentialsLoaded && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              <div className="space-y-4">
+                <input value={credClientId} onChange={e => setCredClientId(e.target.value)} placeholder="Client ID" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
+                <input type="password" value={credClientSecret} onChange={e => setCredClientSecret(e.target.value)} placeholder="Client Secret" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
+                <input value={credRefreshToken} onChange={e => setCredRefreshToken(e.target.value)} placeholder="Refresh Token" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
+                <input value={credApiDomain} onChange={e => setCredApiDomain(e.target.value)} placeholder="API Domain (https://sign.zoho.com)" className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono" />
+                <button onClick={saveCredentials} className="w-full bg-slate-900 text-white py-3 rounded-lg font-black text-sm hover:bg-slate-800">Save Credentials</button>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500 font-black">Subscription</p>
+                  <h3 className="text-xl font-black text-slate-900">Plan & Status</h3>
+                </div>
+                {!subscriptionLoaded && <span className="text-xs text-slate-400">Loading…</span>}
+              </div>
+              <div className="space-y-3">
+                <select
+                  value={subscription?.plan || 'free'}
+                  onChange={e => saveSubscription(e.target.value, subscription?.status || 'active', subscription?.seats)}
+                  className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
+                >
+                  <option value="free">Free</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+                <select
+                  value={subscription?.status || 'active'}
+                  onChange={e => saveSubscription(subscription?.plan || 'free', e.target.value, subscription?.seats)}
+                  className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
+                >
+                  <option value="active">Active</option>
+                  <option value="past_due">Past Due</option>
+                  <option value="canceled">Canceled</option>
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  value={subscription?.seats ?? 1}
+                  onChange={e => saveSubscription(subscription?.plan || 'free', subscription?.status || 'active', Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-lg border border-slate-200 text-sm font-bold"
+                  placeholder="Seats"
+                />
               </div>
             </div>
           </div>
