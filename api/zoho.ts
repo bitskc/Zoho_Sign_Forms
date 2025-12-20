@@ -35,11 +35,13 @@ export default async function handler(req: Request) {
       params.append('code', grantToken);
       params.append('client_id', clientId);
       params.append('client_secret', clientSecret);
+      // Ensure redirect_uri matches what was sent in the Auth URL generation step
       params.append('redirect_uri', redirectUri || 'https://api-console.zoho.com');
       params.append('grant_type', 'authorization_code');
       
       try {
         const data = await getOAuthToken(params, apiDomain || 'sign.zoho.com');
+        // This will include access_token AND refresh_token (if offline access was requested)
         return new Response(JSON.stringify(data), { status: 200 });
       } catch (e: any) {
         return new Response(JSON.stringify({ error: e.message }), { status: 400 });
@@ -52,7 +54,7 @@ export default async function handler(req: Request) {
     const cleanTemplateId = (templateId || '').trim();
     const cleanRoleName = (roleName || "Signer 1").trim();
     
-    // 1. Refresh Access Token
+    // 1. Refresh Access Token using the permanent Refresh Token
     const refreshParams = new URLSearchParams();
     refreshParams.append('refresh_token', refreshToken);
     refreshParams.append('client_id', clientId);
@@ -67,14 +69,13 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ 
         error: 'Authentication Failure', 
         message: authError.message,
-        hint: "Your Refresh Token might be invalid or your Client Credentials don't match your Zoho region."
+        hint: "Your Refresh Token might be invalid or your Client ID/Secret do not match."
       }), { status: 401 });
     }
 
     // 2. Call Zoho Sign API /createdocument
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
     
-    // Payload exactly following Quick Start guide
     const payload = {
       templates: {
         request_name: isTest ? `TEST - ${new Date().toLocaleTimeString()}` : `Signature Request - ${signer.name}`,
@@ -83,7 +84,7 @@ export default async function handler(req: Request) {
             recipient_name: signer.name,
             recipient_email: signer.email,
             action_type: "SIGN",
-            role: cleanRoleName, // Maps to the role name in the template
+            role: cleanRoleName,
             verify_recipient: false,
             is_embedded: true
           }
@@ -117,7 +118,7 @@ export default async function handler(req: Request) {
     }
     
     if (response.status === 400 && responseText.includes("action_id")) {
-      data.debug_hint = `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}. Ensure it matches the template's recipient role name exactly.`;
+      data.debug_hint = `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`;
     }
 
     return new Response(JSON.stringify(data), {
