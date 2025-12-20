@@ -12,13 +12,15 @@ export const triggerZohoSignTemplate = async (
   const endpoint = `/api/zoho`;
 
   try {
-    if (!form.accessToken || form.accessToken === 'demo') {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      return {
-        success: true,
-        requestId: `DEMO-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-        signingUrl: 'https://sign.zoho.com/sign-demo-url'
-      };
+    if (!form.clientId || !form.clientSecret || !form.refreshToken) {
+      if (form.id === 'demo-id' || !form.clientId) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return {
+          success: true,
+          requestId: `DEMO-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+          signingUrl: 'https://sign.zoho.com/sign-demo-url'
+        };
+      }
     }
 
     const response = await fetch(endpoint, {
@@ -26,7 +28,9 @@ export const triggerZohoSignTemplate = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         apiDomain: form.apiDomain,
-        accessToken: form.accessToken,
+        clientId: form.clientId,
+        clientSecret: form.clientSecret,
+        refreshToken: form.refreshToken,
         templateId: form.templateId, 
         roleName: form.roleName, 
         signer,
@@ -37,19 +41,10 @@ export const triggerZohoSignTemplate = async (
     const data = await response.json();
 
     if (!response.ok) {
-      // Return the most detailed info possible for debugging
-      const detail = data.message || data.error_msg || JSON.stringify(data);
+      const detail = data.message || data.error_msg || data.debug_hint || JSON.stringify(data);
       return { 
         success: false, 
-        error: `Zoho rejected the request (${response.status}): ${detail}`
-      };
-    }
-
-    // Check for Zoho-specific application errors that might return 200 but have failure codes
-    if (data.status === 'failure') {
-      return { 
-        success: false, 
-        error: data.message || "Zoho application error" 
+        error: `Zoho Error (${response.status}): ${detail}`
       };
     }
 
@@ -63,6 +58,33 @@ export const triggerZohoSignTemplate = async (
     };
   } catch (error) {
     return { success: false, error: `Bridge Error: ${(error as Error).message}` };
+  }
+};
+
+/**
+ * Exchange a one-time Grant Token (code) for a permanent Refresh Token
+ */
+export const exchangeToken = async (
+  clientId: string,
+  clientSecret: string,
+  grantToken: string,
+  apiDomain: string
+) => {
+  try {
+    const response = await fetch('/api/zoho', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'exchange',
+        clientId,
+        clientSecret,
+        grantToken,
+        apiDomain
+      })
+    });
+    return await response.json();
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 };
 

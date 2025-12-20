@@ -9,9 +9,12 @@ export interface FormDefinition {
   slug: string;
   templateId: string;
   roleName: string;
-  accessToken: string; // Moved here
-  apiDomain: string;    // Moved here
+  clientId: string;      // New: Zoho Client ID
+  clientSecret: string;  // New: Zoho Client Secret
+  refreshToken: string;  // New: Zoho Refresh Token
+  apiDomain: string;     // e.g. https://sign.zoho.com
   createdAt: number;
+  accessToken?: string;  // Optional: cached token
 }
 
 export interface SignerData {
