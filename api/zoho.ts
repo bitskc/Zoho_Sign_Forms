@@ -10,28 +10,36 @@ export default async function handler(req: Request) {
 
   try {
     const body = await req.json();
-    const { apiDomain, accessToken, templateId, signer, roleName, isTest } = body;
+    let { apiDomain, accessToken, templateId, signer, roleName, isTest } = body;
+
+    // Sanitize inputs
+    apiDomain = apiDomain.replace(/\/+$/, ''); // Remove trailing slashes
+    templateId = templateId.trim();
+    roleName = (roleName || "Signer 1").trim();
 
     const endpoint = `${apiDomain}/api/v1/templates/${templateId}/requests`;
     
     // Construct the Zoho payload
+    // Note: Some Zoho data centers require template_id both in URL and Body
     const payload = {
       templates: {
-        request_name: isTest ? `TEST REQUEST - ${new Date().toISOString()}` : `Signature Request - ${signer.name}`,
+        template_id: templateId,
+        request_name: isTest ? `TEST - ${new Date().toLocaleTimeString()}` : `Signature Request - ${signer.name}`,
         actions: [
           {
             recipient_name: signer.name,
             recipient_email: signer.email,
             action_type: "SIGN",
-            role: roleName || "Signer 1",
+            role: roleName,
             verify_recipient: false,
             is_embedded: true
           }
         ],
-        // Field data mapping can help avoid "Field mismatch" errors
+        // Field data helps map placeholders in the template
         field_data: {
           "Signer Name": signer.name,
-          "FullName": signer.name
+          "FullName": signer.name,
+          "Name": signer.name
         }
       }
     };
@@ -45,9 +53,19 @@ export default async function handler(req: Request) {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      data = { error: "Non-JSON Response", raw: responseText };
+    }
     
-    // Pass through the full Zoho status for debugging
+    // Check for "No match found" specifically to add helpful debugging hints
+    if (response.status === 400 && (responseText.includes("No match found") || data.message?.includes("No match found"))) {
+      data.debug_hint = "Common causes for 'No match found': 1. Incorrect Template ID. 2. Role Name (e.g., '" + roleName + "') does not match the template exactly. 3. Incorrect API Domain (e.g., using .com for an .eu account).";
+    }
+
     return new Response(JSON.stringify(data), {
       status: response.status,
       headers: { 'Content-Type': 'application/json' }
