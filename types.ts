@@ -7,8 +7,6 @@ export interface FormDefinition {
   roleName: string;
   apiDomain: string;
   accessToken: string; // holds refresh token
-  clientId?: string;
-  clientSecret?: string;
   createdAt?: number | null;
 }
 

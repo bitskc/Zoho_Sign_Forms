@@ -34,8 +34,6 @@ const App: React.FC = () => {
   const [templateId, setTemplateId] = useState('');
   const [roleName, setRoleName] = useState('Signer 1');
   const [accessToken, setAccessToken] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
 
@@ -175,8 +173,6 @@ const App: React.FC = () => {
     setTemplateId('');
     setRoleName('Signer 1');
     setAccessToken('');
-    setClientId('');
-    setClientSecret('');
     setApiDomain('https://sign.zoho.com');
     setSlug('');
   };
@@ -187,8 +183,6 @@ const App: React.FC = () => {
     setTemplateId(form.templateId);
     setRoleName(form.roleName);
     setAccessToken(form.accessToken || '');
-    setClientId(form.clientId || '');
-    setClientSecret(form.clientSecret || '');
     setApiDomain(form.apiDomain || 'https://sign.zoho.com');
     setSlug(form.slug);
   };
@@ -207,8 +201,6 @@ const App: React.FC = () => {
       roleName: roleName.trim(),
       apiDomain: apiDomain.trim(),
       accessToken: accessToken.trim(),
-      clientId: clientId.trim(),
-      clientSecret: clientSecret.trim(),
       createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now()
     };
     const res = await fetch('/api/forms', {
@@ -347,10 +339,6 @@ const App: React.FC = () => {
                       <input required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="Role (e.g. Signer 1)" className="w-full px-5 py-4 rounded-2xl text-sm font-bold outline-none" />
                     </div>
                     <input required value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="Refresh Token" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-50" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <input required value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Zoho Client ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
-                      <input required value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Zoho Client Secret" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
-                    </div>
                     <input required value={apiDomain} onChange={e => setApiDomain(e.target.value)} placeholder="API Domain (e.g. https://sign.zoho.com)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
                   </div>
 

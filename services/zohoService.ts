@@ -30,8 +30,6 @@ export const triggerZohoSignTemplate = async (
         apiDomain: form.apiDomain,
         // reuse stored accessToken field to hold the refresh token
         refreshToken: form.accessToken,
-        clientId: form.clientId,
-        clientSecret: form.clientSecret,
         templateId: form.templateId, 
         roleName: form.roleName, 
         signer,
