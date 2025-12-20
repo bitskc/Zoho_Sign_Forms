@@ -76,9 +76,17 @@ const App: React.FC = () => {
     }
   };
 
+  const getAccountsBaseUrl = (domain: string) => {
+    if (domain.includes('.eu')) return 'https://accounts.zoho.eu';
+    if (domain.includes('.in')) return 'https://accounts.zoho.in';
+    if (domain.includes('.com.au')) return 'https://accounts.zoho.com.au';
+    if (domain.includes('.jp')) return 'https://accounts.zoho.jp';
+    return 'https://accounts.zoho.com';
+  };
+
   const getAuthUrl = () => {
-    const tld = apiDomain.split('.').pop() || 'com';
-    const accountsUrl = `https://accounts.zoho.${tld === 'com' ? 'com' : tld}/oauth/v2/auth`;
+    const baseUrl = getAccountsBaseUrl(apiDomain);
+    const accountsUrl = `${baseUrl}/oauth/v2/auth`;
     const scopes = 'ZohoSign.templates.READ,ZohoSign.requests.CREATE,ZohoSign.templates.CREATE,ZohoSign.requests.READ';
     const redirect = encodeURIComponent(redirectUri || 'https://api-console.zoho.com');
     return `${accountsUrl}?scope=${scopes}&client_id=${clientId}&state=signflow&response_type=code&redirect_uri=${redirect}&access_type=offline&prompt=consent`;
@@ -97,7 +105,7 @@ const App: React.FC = () => {
       setRefreshToken(res.refresh_token);
       alert("Success! Refresh Token received and saved.");
     } else {
-      alert(`Exchange Failed: ${res.error || 'Check your credentials and region.'}\n\nHint: Ensure your Redirect URI below matches EXACTLY what is in your Zoho API Console application settings.`);
+      alert(`Exchange Failed: ${res.error || 'Check your credentials and region.'}\n\nIMPORTANT: The Redirect URI in the form below MUST match what you put in the Zoho API Console exactly.`);
     }
   };
 
@@ -249,9 +257,12 @@ const App: React.FC = () => {
                     <input required value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Client ID" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none" />
                     <input required type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Client Secret" className="w-full px-5 py-4 rounded-2xl text-sm outline-none" />
                     
-                    <div className="relative">
-                      <input value={redirectUri} onChange={e => setRedirectUri(e.target.value)} placeholder="Redirect URI (Matches Zoho Console)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-700 text-slate-300 border border-slate-600" />
+                    <div className="relative group">
+                      <input value={redirectUri} onChange={e => setRedirectUri(e.target.value)} placeholder="Redirect URI" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-700 text-slate-300 border border-slate-600 focus:border-blue-400" />
                       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-500 uppercase">Redirect URI</div>
+                      <div className="hidden group-hover:block absolute left-0 -top-12 bg-black text-white p-2 rounded text-[10px] w-full z-10 border border-slate-700 font-bold">
+                        Must MATCH exactly what you configured in the Zoho API Console.
+                      </div>
                     </div>
 
                     <div className="relative">
@@ -261,7 +272,8 @@ const App: React.FC = () => {
 
                     {helperVisible && (
                       <div className="mt-4 p-6 bg-blue-600 rounded-3xl animate-in zoom-in duration-300">
-                        <h4 className="text-white font-black text-sm mb-4">OAuth Step-by-Step</h4>
+                        <h4 className="text-white font-black text-sm mb-2">OAuth Helper</h4>
+                        <p className="text-[9px] text-blue-100 mb-4 font-bold opacity-80 leading-tight italic">Mismatch Fix: Ensure the Redirect URI above matches your Zoho Console setting.</p>
                         
                         <div className="space-y-4">
                           <div className="bg-white/10 p-4 rounded-2xl">
@@ -270,7 +282,7 @@ const App: React.FC = () => {
                               type="button" 
                               disabled={!clientId}
                               onClick={() => window.open(getAuthUrl(), '_blank')}
-                              className="w-full bg-white text-blue-600 py-3 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              className="w-full bg-white text-blue-600 py-3 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors disabled:opacity-50 shadow-lg shadow-blue-900/20"
                             >
                               Authorize in Zoho
                             </button>
@@ -281,7 +293,7 @@ const App: React.FC = () => {
                             <p className="text-[10px] font-black text-blue-100 uppercase mb-2">Step 2: Exchange Code</p>
                             <div className="flex gap-2">
                               <input value={helperGrant} onChange={e => setHelperGrant(e.target.value)} placeholder="Paste 'code' here..." className="flex-1 px-3 py-2 rounded-lg text-xs bg-white text-slate-900 outline-none font-mono" />
-                              <button type="button" onClick={handleExchange} disabled={helperLoading} className="bg-slate-900 text-[10px] font-black px-4 rounded-lg">
+                              <button type="button" onClick={handleExchange} disabled={helperLoading} className="bg-slate-900 text-[10px] font-black px-4 rounded-lg hover:bg-black">
                                 {helperLoading ? '...' : 'EXCHANGE'}
                               </button>
                             </div>
@@ -309,7 +321,7 @@ const App: React.FC = () => {
             {/* Forms List */}
             <div className="lg:col-span-7">
               {testResult && (
-                <div className={`mb-8 p-6 rounded-3xl border-2 ${testResult.success ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'} flex items-start justify-between`}>
+                <div className={`mb-8 p-6 rounded-3xl border-2 ${testResult.success ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'} flex items-start justify-between animate-in slide-in-from-top duration-300`}>
                   <div>
                     <p className="font-black text-sm mb-1">{testResult.success ? '✓ Connection Verified' : '✕ Connection Error'}</p>
                     <p className="text-xs opacity-80">{testResult.message}</p>

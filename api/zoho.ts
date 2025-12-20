@@ -3,10 +3,19 @@ export const config = {
   runtime: 'edge',
 };
 
-async function getOAuthToken(params: URLSearchParams, domain: string) {
-  const tld = domain.split('.').pop() || 'com';
-  // Standard Zoho Accounts URLs based on region
-  const accountsUrl = `https://accounts.zoho.${tld === 'com' ? 'com' : tld}/oauth/v2/token`;
+/**
+ * Maps the API domain to the correct Zoho Accounts URL for OAuth
+ */
+function getAccountsUrl(apiDomain: string) {
+  if (apiDomain.includes('.eu')) return 'https://accounts.zoho.eu';
+  if (apiDomain.includes('.in')) return 'https://accounts.zoho.in';
+  if (apiDomain.includes('.com.au')) return 'https://accounts.zoho.com.au';
+  if (apiDomain.includes('.jp')) return 'https://accounts.zoho.jp';
+  return 'https://accounts.zoho.com';
+}
+
+async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
+  const accountsUrl = `${getAccountsUrl(apiDomain)}/oauth/v2/token`;
 
   const response = await fetch(accountsUrl, {
     method: 'POST',
@@ -35,13 +44,12 @@ export default async function handler(req: Request) {
       params.append('code', grantToken);
       params.append('client_id', clientId);
       params.append('client_secret', clientSecret);
-      // Ensure redirect_uri matches what was sent in the Auth URL generation step
+      // The redirect_uri MUST match the one used to generate the code originally
       params.append('redirect_uri', redirectUri || 'https://api-console.zoho.com');
       params.append('grant_type', 'authorization_code');
       
       try {
         const data = await getOAuthToken(params, apiDomain || 'sign.zoho.com');
-        // This will include access_token AND refresh_token (if offline access was requested)
         return new Response(JSON.stringify(data), { status: 200 });
       } catch (e: any) {
         return new Response(JSON.stringify({ error: e.message }), { status: 400 });
@@ -54,7 +62,6 @@ export default async function handler(req: Request) {
     const cleanTemplateId = (templateId || '').trim();
     const cleanRoleName = (roleName || "Signer 1").trim();
     
-    // 1. Refresh Access Token using the permanent Refresh Token
     const refreshParams = new URLSearchParams();
     refreshParams.append('refresh_token', refreshToken);
     refreshParams.append('client_id', clientId);
@@ -73,7 +80,6 @@ export default async function handler(req: Request) {
       }), { status: 401 });
     }
 
-    // 2. Call Zoho Sign API /createdocument
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
     
     const payload = {
