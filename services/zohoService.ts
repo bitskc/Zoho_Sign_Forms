@@ -1,15 +1,18 @@
 
-import { ZohoConfig, SignerData, SubmissionResponse, FormDefinition } from '../types';
+import { SignerData, SubmissionResponse, FormDefinition } from '../types';
 
+/**
+ * Standard trigger for public signature requests
+ */
 export const triggerZohoSignTemplate = async (
-  config: ZohoConfig,
   form: FormDefinition,
-  signer: SignerData
+  signer: SignerData,
+  isTest: boolean = false
 ): Promise<SubmissionResponse> => {
   const endpoint = `/api/zoho`;
 
   try {
-    if (!config.accessToken || config.accessToken === 'demo') {
+    if (!form.accessToken || form.accessToken === 'demo') {
       await new Promise(resolve => setTimeout(resolve, 1500));
       return {
         success: true,
@@ -22,19 +25,32 @@ export const triggerZohoSignTemplate = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        config, 
+        apiDomain: form.apiDomain,
+        accessToken: form.accessToken,
         templateId: form.templateId, 
         roleName: form.roleName, 
-        signer 
+        signer,
+        isTest
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      // Extract detailed error message from Zoho response
-      const errorMessage = data.message || data.error_msg || data.status || "Zoho API Error (400)";
-      return { success: false, error: errorMessage };
+      // Return the most detailed info possible for debugging
+      const detail = data.message || data.error_msg || JSON.stringify(data);
+      return { 
+        success: false, 
+        error: `Zoho rejected the request (${response.status}): ${detail}`
+      };
+    }
+
+    // Check for Zoho-specific application errors that might return 200 but have failure codes
+    if (data.status === 'failure') {
+      return { 
+        success: false, 
+        error: data.message || "Zoho application error" 
+      };
     }
 
     const request = data.requests;
@@ -46,6 +62,17 @@ export const triggerZohoSignTemplate = async (
       signingUrl: action?.signing_url
     };
   } catch (error) {
-    return { success: false, error: "Connection to bridge failed. Check your internet or Vercel logs." };
+    return { success: false, error: `Bridge Error: ${(error as Error).message}` };
   }
+};
+
+/**
+ * Convenience wrapper for testing a connection
+ */
+export const testZohoConnection = async (form: FormDefinition) => {
+  return triggerZohoSignTemplate(
+    form, 
+    { name: "System Test", email: "test@example.com" },
+    true
+  );
 };

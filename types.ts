@@ -1,7 +1,5 @@
 
 export interface ZohoConfig {
-  accessToken: string;
-  apiDomain: string;
   adminPassword: string;
 }
 
@@ -10,7 +8,9 @@ export interface FormDefinition {
   name: string;
   slug: string;
   templateId: string;
-  roleName: string; // Added field
+  roleName: string;
+  accessToken: string; // Moved here
+  apiDomain: string;    // Moved here
   createdAt: number;
 }
 

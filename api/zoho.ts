@@ -10,46 +10,44 @@ export default async function handler(req: Request) {
 
   try {
     const body = await req.json();
-    const { config: zohoConfig, templateId, signer, roleName } = body;
+    const { apiDomain, accessToken, templateId, signer, roleName, isTest } = body;
 
-    const endpoint = `${zohoConfig.apiDomain}/api/v1/templates/${templateId}/requests`;
+    const endpoint = `${apiDomain}/api/v1/templates/${templateId}/requests`;
     
     // Construct the Zoho payload
-    // request_name is often mandatory for successful template triggering
     const payload = {
       templates: {
-        request_name: `Signature Request - ${signer.name}`,
+        request_name: isTest ? `TEST REQUEST - ${new Date().toISOString()}` : `Signature Request - ${signer.name}`,
         actions: [
           {
             recipient_name: signer.name,
             recipient_email: signer.email,
             action_type: "SIGN",
-            role: roleName || "Signer 1", // Use the user-provided role name
+            role: roleName || "Signer 1",
             verify_recipient: false,
             is_embedded: true
           }
-        ]
+        ],
+        // Field data mapping can help avoid "Field mismatch" errors
+        field_data: {
+          "Signer Name": signer.name,
+          "FullName": signer.name
+        }
       }
     };
 
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Zoho-oauthtoken ${zohoConfig.accessToken}`,
+        'Authorization': `Zoho-oauthtoken ${accessToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
 
-    const responseText = await response.text();
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      data = { error: "Raw Response", message: responseText };
-    }
+    const data = await response.json();
     
-    // Return exactly what Zoho said so the frontend can display it
+    // Pass through the full Zoho status for debugging
     return new Response(JSON.stringify(data), {
       status: response.status,
       headers: { 'Content-Type': 'application/json' }

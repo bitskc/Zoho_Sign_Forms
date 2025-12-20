@@ -17,8 +17,6 @@ export const storage = {
   getConfig: (): ZohoConfig => {
     const data = localStorage.getItem(KEYS.CONFIG);
     return data ? JSON.parse(data) : {
-      accessToken: '',
-      apiDomain: 'https://sign.zoho.com',
       adminPassword: 'admin' // Default password
     };
   },
