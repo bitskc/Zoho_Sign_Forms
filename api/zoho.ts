@@ -19,6 +19,9 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
 
   const response = await fetch(accountsUrl, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    },
     body: params,
   });
 
@@ -58,6 +61,19 @@ export default async function handler(req: Request) {
 
     // --- CASE 2: Standard Sign Request ---
     const { templateId, signer, roleName, isTest } = body;
+    if (!clientId || !clientSecret || !refreshToken) {
+      return new Response(JSON.stringify({ 
+        error: 'Missing credentials', 
+        message: 'clientId, clientSecret, and refreshToken are required.' 
+      }), { status: 400 });
+    }
+    if (!templateId || !signer?.name || !signer?.email) {
+      return new Response(JSON.stringify({ 
+        error: 'Missing data', 
+        message: 'templateId, signer.name, and signer.email are required.' 
+      }), { status: 400 });
+    }
+
     const cleanDomain = (apiDomain || 'https://sign.zoho.com').replace(/\/+$/, '').trim();
     const cleanTemplateId = (templateId || '').trim();
     const cleanRoleName = (roleName || "Signer 1").trim();

@@ -41,10 +41,14 @@ export const triggerZohoSignTemplate = async (
     const data = await response.json();
 
     if (!response.ok) {
-      const detail = data.message || data.error_msg || data.debug_hint || JSON.stringify(data);
+      const detail = data.message || data.error || data.error_msg || data.debug_hint || JSON.stringify(data);
+      // Preserve a specific hint for role mismatch if Zoho mentions action_id
+      const hint = data.debug_hint || (typeof detail === 'string' && detail.includes('action_id') 
+        ? 'Role mismatch: verify the role name exactly matches the template.' 
+        : undefined);
       return { 
         success: false, 
-        error: `Zoho Error (${response.status}): ${detail}`
+        error: `Zoho Error (${response.status}): ${detail}${data.hint ? ` — ${data.hint}` : ''}`
       };
     }
 
