@@ -36,6 +36,7 @@ const App: React.FC = () => {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
+  const [redirectUri, setRedirectUri] = useState('https://api-console.zoho.com');
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
 
@@ -79,9 +80,7 @@ const App: React.FC = () => {
     const tld = apiDomain.split('.').pop() || 'com';
     const accountsUrl = `https://accounts.zoho.${tld === 'com' ? 'com' : tld}/oauth/v2/auth`;
     const scopes = 'ZohoSign.templates.READ,ZohoSign.requests.CREATE,ZohoSign.templates.CREATE,ZohoSign.requests.READ';
-    // redirect_uri must match what is in Zoho API Console. 
-    // Using a common placeholder for Self-Client or the current app URL.
-    const redirect = encodeURIComponent('https://api-console.zoho.com');
+    const redirect = encodeURIComponent(redirectUri || 'https://api-console.zoho.com');
     return `${accountsUrl}?scope=${scopes}&client_id=${clientId}&state=signflow&response_type=code&redirect_uri=${redirect}&access_type=offline&prompt=consent`;
   };
 
@@ -91,14 +90,14 @@ const App: React.FC = () => {
       return;
     }
     setHelperLoading(true);
-    const res = await exchangeToken(clientId, clientSecret, helperGrant, apiDomain);
+    const res = await exchangeToken(clientId, clientSecret, helperGrant, apiDomain, redirectUri);
     setHelperLoading(false);
 
     if (res.refresh_token) {
       setRefreshToken(res.refresh_token);
       alert("Success! Refresh Token received and saved.");
     } else {
-      alert(`Exchange Failed: ${res.error || 'Check your credentials and region.'}\n\nHint: Ensure your Redirect URI in Zoho Console is set to https://api-console.zoho.com`);
+      alert(`Exchange Failed: ${res.error || 'Check your credentials and region.'}\n\nHint: Ensure your Redirect URI below matches EXACTLY what is in your Zoho API Console application settings.`);
     }
   };
 
@@ -110,6 +109,7 @@ const App: React.FC = () => {
     setClientId('');
     setClientSecret('');
     setRefreshToken('');
+    setRedirectUri('https://api-console.zoho.com');
     setApiDomain('https://sign.zoho.com');
     setSlug('');
   };
@@ -122,6 +122,7 @@ const App: React.FC = () => {
     setClientId(form.clientId);
     setClientSecret(form.clientSecret);
     setRefreshToken(form.refreshToken);
+    setRedirectUri(form.redirectUri || 'https://api-console.zoho.com');
     setApiDomain(form.apiDomain);
     setSlug(form.slug);
   };
@@ -136,6 +137,7 @@ const App: React.FC = () => {
       clientId: clientId.trim(),
       clientSecret: clientSecret.trim(),
       refreshToken: refreshToken.trim(),
+      redirectUri: redirectUri.trim() || 'https://api-console.zoho.com',
       apiDomain: apiDomain.trim() || 'https://sign.zoho.com',
       slug: slug.trim() || formName.toLowerCase().replace(/\s+/g, '-'),
       createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now()
@@ -248,8 +250,13 @@ const App: React.FC = () => {
                     <input required type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Client Secret" className="w-full px-5 py-4 rounded-2xl text-sm outline-none" />
                     
                     <div className="relative">
-                      <input required value={refreshToken} onChange={e => setRefreshToken(e.target.value)} placeholder="Refresh Token (Permanent Key)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-blue-50/10 text-blue-200 border border-blue-500/30" />
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400 uppercase">Required</div>
+                      <input value={redirectUri} onChange={e => setRedirectUri(e.target.value)} placeholder="Redirect URI (Matches Zoho Console)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-slate-700 text-slate-300 border border-slate-600" />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-500 uppercase">Redirect URI</div>
+                    </div>
+
+                    <div className="relative">
+                      <input required value={refreshToken} onChange={e => setRefreshToken(e.target.value)} placeholder="Refresh Token (Exchange required first)" className="w-full px-5 py-4 rounded-2xl text-sm font-mono outline-none bg-blue-50/10 text-blue-200 border border-blue-500/30" />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-blue-400 uppercase">Token</div>
                     </div>
 
                     {helperVisible && (
@@ -267,15 +274,15 @@ const App: React.FC = () => {
                             >
                               Authorize in Zoho
                             </button>
-                            {!clientId && <p className="text-[9px] text-blue-200 mt-2 text-center">Enter Client ID first to generate link</p>}
+                            {!clientId && <p className="text-[9px] text-blue-200 mt-2 text-center font-bold">Client ID Required</p>}
                           </div>
 
                           <div className="bg-white/10 p-4 rounded-2xl">
                             <p className="text-[10px] font-black text-blue-100 uppercase mb-2">Step 2: Exchange Code</p>
                             <div className="flex gap-2">
-                              <input value={helperGrant} onChange={e => setHelperGrant(e.target.value)} placeholder="Paste 'code' here..." className="flex-1 px-3 py-2 rounded-lg text-xs bg-white text-slate-900 outline-none" />
+                              <input value={helperGrant} onChange={e => setHelperGrant(e.target.value)} placeholder="Paste 'code' here..." className="flex-1 px-3 py-2 rounded-lg text-xs bg-white text-slate-900 outline-none font-mono" />
                               <button type="button" onClick={handleExchange} disabled={helperLoading} className="bg-slate-900 text-[10px] font-black px-4 rounded-lg">
-                                {helperLoading ? '...' : 'GET TOKEN'}
+                                {helperLoading ? '...' : 'EXCHANGE'}
                               </button>
                             </div>
                           </div>
@@ -289,6 +296,7 @@ const App: React.FC = () => {
                     <option value="https://sign.zoho.eu">Europe (.eu)</option>
                     <option value="https://sign.zoho.in">India (.in)</option>
                     <option value="https://sign.zoho.com.au">Australia (.com.au)</option>
+                    <option value="https://sign.zoho.jp">Japan (.jp)</option>
                   </select>
 
                   <button className="w-full bg-blue-600 text-white font-black py-5 rounded-[1.5rem] hover:bg-blue-500 transition-all shadow-xl">
@@ -324,9 +332,10 @@ const App: React.FC = () => {
                       <tr key={form.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-8 py-8">
                           <p className="font-black text-slate-800 text-xl mb-1">{form.name}</p>
-                          <div className="flex gap-2 mb-4">
+                          <div className="flex flex-wrap gap-2 mb-4">
                              <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-bold">TEMPLATE: {form.templateId}</span>
                              <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold uppercase">{form.apiDomain.split('.').pop()}</span>
+                             <span className="text-[9px] bg-slate-900 text-slate-400 px-2 py-1 rounded font-mono">OAuth Active</span>
                           </div>
                           <div className="flex items-center gap-2 group">
                              <code className="text-[10px] text-blue-600 font-bold bg-blue-50/50 px-2 py-1 rounded">/f/{form.slug}</code>
@@ -339,11 +348,11 @@ const App: React.FC = () => {
                         </td>
                         <td className="px-8 py-8">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => runConnectionTest(form)} disabled={testingId === form.id} className="p-3 bg-green-50 text-green-600 rounded-2xl hover:bg-green-600 hover:text-white transition-all">
+                            <button onClick={() => runConnectionTest(form)} disabled={testingId === form.id} className="p-3 bg-green-50 text-green-600 rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-sm">
                                {testingId === form.id ? <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
                             </button>
-                            <button onClick={() => startEdit(form)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                            <button onClick={() => deleteForm(form.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-600 hover:text-white transition-all"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            <button onClick={() => startEdit(form)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                            <button onClick={() => deleteForm(form.id)} className="p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                           </div>
                         </td>
                       </tr>
@@ -420,7 +429,7 @@ const App: React.FC = () => {
           <div className="max-w-xl">
             <h1 className="text-[10rem] font-black text-slate-100 leading-none">404</h1>
             <h2 className="text-4xl font-black text-slate-900 mb-6">Integration Portal Missing</h2>
-            <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest">Return to Safety</a>
+            <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl">Return to Safety</a>
           </div>
         </div>
       )}

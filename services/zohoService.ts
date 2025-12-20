@@ -68,7 +68,8 @@ export const exchangeToken = async (
   clientId: string,
   clientSecret: string,
   grantToken: string,
-  apiDomain: string
+  apiDomain: string,
+  redirectUri: string
 ) => {
   try {
     const response = await fetch('/api/zoho', {
@@ -79,7 +80,8 @@ export const exchangeToken = async (
         clientId,
         clientSecret,
         grantToken,
-        apiDomain
+        apiDomain,
+        redirectUri
       })
     });
     return await response.json();
