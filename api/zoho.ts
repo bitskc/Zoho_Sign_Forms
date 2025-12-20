@@ -40,13 +40,15 @@ export default async function handler(req: Request) {
   try {
     const body = await req.json();
     const { action, apiDomain, clientId, clientSecret, refreshToken, grantToken, redirectUri } = body;
+    const resolvedClientId = clientId || process.env.ZOHO_CLIENT_ID;
+    const resolvedClientSecret = clientSecret || process.env.ZOHO_CLIENT_SECRET;
 
     // --- CASE 1: Initial OAuth Exchange (Grant Token -> Refresh Token) ---
     if (action === 'exchange') {
       const params = new URLSearchParams();
       params.append('code', grantToken);
-      params.append('client_id', clientId);
-      params.append('client_secret', clientSecret);
+      params.append('client_id', resolvedClientId || '');
+      params.append('client_secret', resolvedClientSecret || '');
       // The redirect_uri MUST match the one used to generate the code originally
       params.append('redirect_uri', redirectUri || 'https://api-console.zoho.com');
       params.append('grant_type', 'authorization_code');
@@ -61,10 +63,10 @@ export default async function handler(req: Request) {
 
     // --- CASE 2: Standard Sign Request ---
     const { templateId, signer, roleName, isTest, accessToken: providedAccessToken } = body;
-    if (!providedAccessToken && (!clientId || !clientSecret || !refreshToken)) {
+    if (!providedAccessToken && (!resolvedClientId || !resolvedClientSecret || !refreshToken)) {
       return new Response(JSON.stringify({ 
         error: 'Missing credentials', 
-        message: 'clientId, clientSecret, and refreshToken are required unless you provide accessToken.' 
+        message: 'clientId/clientSecret must be set on the server and refreshToken provided unless you pass accessToken.' 
       }), { status: 400 });
     }
     if (!templateId || !signer?.name || !signer?.email) {
@@ -82,8 +84,8 @@ export default async function handler(req: Request) {
     if (!accessToken) {
       const refreshParams = new URLSearchParams();
       refreshParams.append('refresh_token', refreshToken);
-      refreshParams.append('client_id', clientId);
-      refreshParams.append('client_secret', clientSecret);
+      refreshParams.append('client_id', resolvedClientId || '');
+      refreshParams.append('client_secret', resolvedClientSecret || '');
       refreshParams.append('grant_type', 'refresh_token');
 
       try {
