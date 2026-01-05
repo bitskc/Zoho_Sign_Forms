@@ -47,6 +47,7 @@ export interface SubmissionResponse {
 }
 
 export enum ViewMode {
+  LANDING = 'LANDING',
   PUBLIC_FORM = 'PUBLIC_FORM',
   ADMIN_LOGIN = 'ADMIN_LOGIN',
   ADMIN_DASHBOARD = 'ADMIN_DASHBOARD',
