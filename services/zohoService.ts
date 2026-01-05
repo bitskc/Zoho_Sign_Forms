@@ -63,7 +63,8 @@ export const triggerZohoSignTemplate = async (
     }
 
     const request = data.requests;
-    const action = request?.actions?.[0];
+    const actions = request?.actions || [];
+    const action = actions[0];
     
     return { 
       success: true, 

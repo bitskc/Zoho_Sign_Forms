@@ -399,16 +399,10 @@ const App: React.FC = () => {
       userId: currentForm.userId
     });
     
-    // Debug logging
-    console.log('API Response:', res);
-    console.log('Signing URL:', res.signingUrl);
-    
     if (res.success) {
       if (res.signingUrl) {
-        console.log('Redirecting to:', res.signingUrl);
         window.location.href = res.signingUrl;
       } else {
-        console.log('No signing URL found, showing success screen');
         setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
       }
     } else {
