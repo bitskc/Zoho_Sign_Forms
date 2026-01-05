@@ -87,6 +87,10 @@ const App: React.FC = () => {
 
   const [subscription, setSubscription] = useState<SubscriptionPlan | null>(null);
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
+  
+  // Debounce flags to prevent infinite retry loops
+  const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
+  const [subscriptionFetchAttempted, setSubscriptionFetchAttempted] = useState(false);
 
   const fetchForms = async (token: string) => {
     const res = await fetch('/api/forms', {
@@ -120,6 +124,13 @@ const App: React.FC = () => {
   };
 
   const fetchCredentials = async (token: string) => {
+    if (credentialsFetchAttempted) {
+      setCredentialsLoaded(true);
+      return;
+    }
+    
+    setCredentialsFetchAttempted(true);
+    
     try {
       const res = await fetch('/api/credentials', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -130,7 +141,13 @@ const App: React.FC = () => {
         setCredApiDomain(data.apiDomain || 'https://sign.zoho.com');
       }
     } catch (e) {
-      console.error('fetch credentials error', e);
+      // Silently handle network errors to prevent console spam
+      if (e instanceof TypeError && e.message === 'Failed to fetch') {
+        // Network error - likely API not available
+        console.warn('Credentials API unavailable - using defaults');
+      } else {
+        console.error('fetch credentials error', e);
+      }
     } finally {
       setCredentialsLoaded(true);
     }
@@ -154,10 +171,19 @@ const App: React.FC = () => {
       setError(`Save credentials failed: ${msg}`);
       return;
     }
+    // Reset debounce flag and refetch
+    setCredentialsFetchAttempted(false);
     await fetchCredentials(sessionToken);
   };
 
   const fetchSubscription = async (token: string) => {
+    if (subscriptionFetchAttempted) {
+      setSubscriptionLoaded(true);
+      return;
+    }
+    
+    setSubscriptionFetchAttempted(true);
+    
     try {
       const res = await fetch('/api/subscription', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -165,7 +191,13 @@ const App: React.FC = () => {
         setSubscription(data);
       }
     } catch (e) {
-      console.error('fetch subscription error', e);
+      // Silently handle network errors to prevent console spam
+      if (e instanceof TypeError && e.message === 'Failed to fetch') {
+        // Network error - likely API not available
+        console.warn('Subscription API unavailable - using defaults');
+      } else {
+        console.error('fetch subscription error', e);
+      }
     } finally {
       setSubscriptionLoaded(true);
     }
@@ -183,6 +215,8 @@ const App: React.FC = () => {
       setError(`Save subscription failed: ${msg}`);
       return;
     }
+    // Reset debounce flag and refetch
+    setSubscriptionFetchAttempted(false);
     await fetchSubscription(sessionToken);
   };
 
@@ -361,6 +395,7 @@ const App: React.FC = () => {
     setRoleName('Signer 1');
     setApiDomain('https://sign.zoho.com');
     setSlug('');
+    setError(null);
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -370,6 +405,7 @@ const App: React.FC = () => {
     setRoleName(form.roleName);
     setApiDomain(form.apiDomain || 'https://sign.zoho.com');
     setSlug(form.slug);
+    setError(null);
   };
 
   const saveForm = async (e: React.FormEvent) => {
@@ -689,6 +725,12 @@ const App: React.FC = () => {
                     </div>
                     <input required value={apiDomain} onChange={e => setApiDomain(e.target.value)} placeholder="API Domain (e.g. https://sign.zoho.com)" className={`w-full px-5 py-4 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                   </div>
+
+                  {error && (
+                    <div className={`p-4 text-sm font-medium rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                       {error}
+                    </div>
+                  )}
 
                   <div className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'} p-6 rounded-xl space-y-4`}>
                     <div className="flex items-center justify-between">
