@@ -398,10 +398,17 @@ const App: React.FC = () => {
     const res = await triggerZohoSignTemplate(currentForm, signer, false, {
       userId: currentForm.userId
     });
+    
+    // Debug logging
+    console.log('API Response:', res);
+    console.log('Signing URL:', res.signingUrl);
+    
     if (res.success) {
       if (res.signingUrl) {
+        console.log('Redirecting to:', res.signingUrl);
         window.location.href = res.signingUrl;
       } else {
+        console.log('No signing URL found, showing success screen');
         setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
       }
     } else {
@@ -428,7 +435,14 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      {view === ViewMode.LANDING && (
+      {!isRouteResolved ? (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading...</p>
+          </div>
+        </div>
+      ) : view === ViewMode.LANDING && (
         <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
           <Header />
           <main className="max-w-6xl mx-auto px-6 pt-16 pb-24">
