@@ -51,7 +51,7 @@ const App: React.FC = () => {
     return ViewMode.LANDING;
   };
   
-  const [view, setView] = useState<ViewMode>(getInitialView());
+  const [view, setView] = useState<ViewMode | null>(null);
   const [isRouteResolved, setIsRouteResolved] = useState(false);
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
@@ -241,6 +241,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const resolveRoute = () => {
+      // Don't resolve routes until auth check is complete to prevent flickering
+      if (!isRouteResolved) {
+        return;
+      }
+      
       const hash = window.location.hash || '';
       const path = window.location.pathname || '/';
 
@@ -314,6 +319,8 @@ const App: React.FC = () => {
         ]);
       }
       setIsRouteResolved(true);
+      // Now that auth check is complete, resolve the route
+      resolveRoute();
     };
     init();
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -594,14 +601,14 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      {!isRouteResolved ? (
+      {!isRouteResolved || view === null ? (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading...</p>
           </div>
         </div>
-      ) : view === ViewMode.LANDING && (
+      ) : view === ViewMode.LANDING ? (
         <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
           <Header />
           <main className="max-w-6xl mx-auto px-6 pt-16 pb-24">
