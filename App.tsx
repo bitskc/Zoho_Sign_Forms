@@ -5,6 +5,20 @@ import Header from './components/Header';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 
+// Reserved slugs that cannot be used for forms
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico'];
+
+// Validate slug format and check against reserved words
+const isValidSlug = (slug: string): boolean => {
+  if (!slug || slug.length === 0) return false;
+  // Only allow alphanumeric characters and hyphens
+  const slugRegex = /^[a-z0-9-]+$/;
+  if (!slugRegex.test(slug)) return false;
+  // Check against reserved words
+  if (RESERVED_SLUGS.includes(slug.toLowerCase())) return false;
+  return true;
+};
+
 // Extend window for ZohoSign SDK
 declare global {
   interface Window {
@@ -96,6 +110,10 @@ const App: React.FC = () => {
       const data = await res.json();
       setCurrentForm(data);
       setView(ViewMode.PUBLIC_FORM);
+      // Update browser history for proper back/forward navigation
+      if (window.location.pathname !== `/${slugVal}`) {
+        window.history.pushState({ slug: slugVal }, '', `/${slugVal}`);
+      }
     } catch {
       setView(ViewMode.NOT_FOUND);
     }
@@ -176,12 +194,24 @@ const App: React.FC = () => {
       // Handle path-based form URLs (e.g., /formslug)
       if (path !== '/' && !path.startsWith('/api')) {
         const slugVal = path.substring(1).replace(/\/$/, '');
+        
+        // Validate slug format
+        if (!isValidSlug(slugVal)) {
+          setView(ViewMode.NOT_FOUND);
+          return;
+        }
+        
+        // Check if form exists in loaded forms first (avoid race condition)
         const found = forms.find(f => f.slug === slugVal);
         if (found) {
           setCurrentForm(found);
           setView(ViewMode.PUBLIC_FORM);
-        } else if (slugVal) {
+        } else if (slugVal && isRouteResolved) {
+          // Only fetch if initial route resolution is complete
           fetchFormBySlug(slugVal);
+        } else if (!isRouteResolved) {
+          // Wait for initial load to complete, will re-check when forms populate
+          setView(ViewMode.PUBLIC_FORM);
         } else {
           setView(ViewMode.NOT_FOUND);
         }
@@ -262,8 +292,11 @@ const App: React.FC = () => {
         }
       }
     });
-    return () => window.removeEventListener('hashchange', resolveRoute);
-  }, []);
+    return () => {
+      window.removeEventListener('hashchange', resolveRoute);
+      window.removeEventListener('popstate', resolveRoute);
+    };
+  }, [forms, isRouteResolved]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -345,10 +378,25 @@ const App: React.FC = () => {
       setError('Not authenticated');
       return;
     }
+    
+    // Validate slug before saving
+    const trimmedSlug = slug.trim().toLowerCase();
+    if (!isValidSlug(trimmedSlug)) {
+      setError('Invalid slug. Use only lowercase letters, numbers, and hyphens. Avoid reserved words like "api", "admin", etc.');
+      return;
+    }
+    
+    // Check for duplicate slugs (excluding current form if editing)
+    const duplicateSlug = forms.find(f => f.slug === trimmedSlug && f.id !== editingId);
+    if (duplicateSlug) {
+      setError(`Slug "${trimmedSlug}" is already in use. Please choose a different slug.`);
+      return;
+    }
+    
     const formDef: FormDefinition = {
       id: editingId || crypto.randomUUID(),
       name: formName.trim(),
-      slug: slug.trim(),
+      slug: trimmedSlug,
       templateId: templateId.trim(),
       roleName: roleName.trim(),
       apiDomain: apiDomain.trim(),
@@ -802,59 +850,59 @@ const App: React.FC = () => {
 
       {view === ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen p-6">
-          <div className="w-full max-w-xl">
+          <div className="w-full max-w-md">
             {!currentForm ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-14 rounded-[2rem] shadow-2xl text-center`}>
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading form...</p>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-2xl shadow-xl text-center border`}>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} font-medium text-sm`}>Loading form...</p>
               </div>
             ) : !successData ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-14 rounded-[2rem] shadow-2xl animate-in fade-in duration-700`}>
-                <div className="text-center mb-12">
-                  <div className={`inline-flex items-center justify-center w-20 h-20 rounded-xl mb-8 border ${darkMode ? 'bg-slate-800 text-blue-200 border-slate-700' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                    <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-2xl shadow-xl animate-in fade-in duration-700 border`}>
+                <div className="text-center mb-8">
+                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
+                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                   </div>
-                  <h1 className={`text-5xl font-black mb-4 tracking-tighter ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{currentForm.name}</h1>
-                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Digital Signature Gateway</p>
+                  <h1 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{currentForm.name}</h1>
+                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm`}>Digital Signature Gateway</p>
                 </div>
                 <form onSubmit={(e) => {
                   e.preventDefault();
                   const target = e.target as any;
                   handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
-                }} className="space-y-7">
-                  <div className="space-y-3">
-                    <label className={`text-[11px] font-black uppercase tracking-[0.3em] ml-2 ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>Full Name</label>
-                    <input required name="signerName" placeholder="John Doe" className={`w-full px-8 py-6 rounded-xl outline-none focus:ring-8 focus:ring-blue-500/10 font-black text-lg border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                }} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Full Name</label>
+                    <input required name="signerName" placeholder="John Doe" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                   </div>
-                  <div className="space-y-3">
-                    <label className={`text-[11px] font-black uppercase tracking-[0.3em] ml-2 ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>Email Address</label>
-                    <input required name="signerEmail" type="email" placeholder="john@example.com" className={`w-full px-8 py-6 rounded-xl outline-none focus:ring-8 focus:ring-blue-500/10 font-black text-lg border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Email Address</label>
+                    <input required name="signerEmail" type="email" placeholder="john@example.com" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                   </div>
                   {error && (
-                    <div className={`p-6 text-sm font-bold rounded-3xl border-2 ${darkMode ? 'bg-red-950 text-red-200 border-red-900' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                    <div className={`p-3 text-xs font-medium rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
                        {error}
                     </div>
                   )}
-                  <button disabled={loading} className="w-full bg-blue-600 text-white py-7 rounded-xl font-black text-2xl shadow-3xl shadow-blue-600/40 hover:bg-blue-700 transition-all active:scale-[0.98] mt-6 tracking-tight disabled:opacity-50">
+                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-bold text-base shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
                     {loading ? "Preparing Document..." : "Sign Now"}
                   </button>
                 </form>
               </div>
             ) : (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-20 rounded-[5rem] shadow-2xl text-center animate-in zoom-in duration-500`}>
-                <div className={`w-32 h-32 rounded-[3rem] flex items-center justify-center mx-auto mb-12 shadow-inner border-2 animate-bounce ${darkMode ? 'bg-green-900 text-green-200 border-green-800' : 'bg-green-50 text-green-500 border-green-100'}`}>
-                  <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" /></svg>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-10 rounded-2xl shadow-xl text-center animate-in zoom-in duration-500 border`}>
+                <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${darkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-50 text-green-600'}`}>
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>
-                <h2 className={`text-5xl font-black mb-4 tracking-tighter ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Portal Ready</h2>
-                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-xl mb-14`}>Your agreement is prepared and waiting.</p>
+                <h2 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Document Ready</h2>
+                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Your agreement is prepared and waiting.</p>
                 {successData.signingUrl ? (
-                  <button onClick={() => openZohoSign(successData.signingUrl!)} className="w-full bg-slate-900 text-white py-8 rounded-[2.5rem] font-black text-2xl shadow-3xl hover:bg-slate-800 transition-all active:scale-95 tracking-tight">Open Signature Interface</button>
+                  <button onClick={() => openZohoSign(successData.signingUrl!)} className="w-full bg-slate-900 text-white py-3.5 rounded-lg font-bold text-base shadow-lg hover:bg-slate-800 transition-all active:scale-[0.98]">Open Signature Interface</button>
                 ) : (
-                  <div className={`${darkMode ? 'bg-blue-900/30 text-blue-200 border border-blue-800' : 'bg-blue-50/50 text-blue-700 border-2 border-blue-100'} p-10 rounded-[3rem] font-black text-lg`}>
+                  <div className={`${darkMode ? 'bg-blue-900/30 text-blue-200 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-200'} p-4 rounded-lg text-sm font-medium`}>
                     A secure link has been sent to your email.
                   </div>
                 )}
-                <button onClick={() => setSuccessData(null)} className={`mt-14 font-black uppercase text-sm tracking-[0.5em] transition-colors ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-300 hover:text-slate-600'}`}>Go Back</button>
+                <button onClick={() => setSuccessData(null)} className={`mt-6 font-semibold text-xs uppercase tracking-wider transition-colors ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>Go Back</button>
               </div>
             )}
           </div>

@@ -5,10 +5,6 @@
       "destination": "/api/:path*"
     },
     {
-      "source": "/:slug",
-      "destination": "/index.html"
-    },
-    {
       "source": "/:path*",
       "destination": "/index.html"
     }
