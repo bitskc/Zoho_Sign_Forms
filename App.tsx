@@ -346,16 +346,23 @@ const App: React.FC = () => {
         
         const hash = window.location.hash;
         const path = window.location.pathname || '/';
-        if (hash.startsWith('#/admin')) {
-          window.location.hash = '';
-          setView(ViewMode.LANDING);
+        
+        // Allow access to login/signup pages, but redirect dashboard/settings
+        if (hash.startsWith('#/admin/dashboard') || hash.startsWith('#/admin/settings')) {
+          window.location.hash = '#/admin/login';
+          setView(ViewMode.ADMIN_LOGIN);
+        } else if (hash.startsWith('#/admin/login') || hash.startsWith('#/admin/signup') || hash === '#/admin') {
+          // Allow login/signup pages when not authenticated
+          // Don't redirect - let resolveRoute handle it
         } else if (path !== '/' && !path.startsWith('/api')) {
           setView(ViewMode.PUBLIC_FORM);
         } else {
-          if (hash !== '') {
+          if (hash !== '' && !hash.startsWith('#/admin')) {
             window.location.hash = '';
           }
-          setView(ViewMode.LANDING);
+          if (!hash.startsWith('#/admin')) {
+            setView(ViewMode.LANDING);
+          }
         }
       }
     });
