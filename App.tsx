@@ -17,12 +17,20 @@ const App: React.FC = () => {
     const hash = window.location.hash || '';
     const path = window.location.pathname || '/';
     const effective = hash || `#${path}`;
+    const hostname = window.location.hostname;
     
     if (effective.startsWith('#/f/')) {
       return ViewMode.PUBLIC_FORM;
     } else if (effective.startsWith('#/admin')) {
       return ViewMode.ADMIN_LOGIN;
     }
+    
+    // If on app subdomain and no hash, redirect to admin
+    if (hostname.startsWith('app.') && effective === '#/') {
+      window.location.hash = '#/admin';
+      return ViewMode.ADMIN_LOGIN;
+    }
+    
     return ViewMode.LANDING;
   };
   
