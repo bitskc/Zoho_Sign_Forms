@@ -125,7 +125,6 @@ const App: React.FC = () => {
 
   const fetchCredentials = async (token: string) => {
     if (credentialsFetchAttempted) {
-      setCredentialsLoaded(true);
       return;
     }
     
@@ -139,6 +138,9 @@ const App: React.FC = () => {
         setCredClientSecret(data.clientSecret || '');
         setCredRefreshToken(data.refreshToken || '');
         setCredApiDomain(data.apiDomain || 'https://sign.zoho.com');
+      } else if (res.status === 404) {
+        // 404 is expected - API endpoint doesn't exist yet
+        console.warn('Credentials API not implemented (404)');
       }
     } catch (e) {
       // Silently handle network errors to prevent console spam
@@ -178,7 +180,6 @@ const App: React.FC = () => {
 
   const fetchSubscription = async (token: string) => {
     if (subscriptionFetchAttempted) {
-      setSubscriptionLoaded(true);
       return;
     }
     
@@ -189,6 +190,9 @@ const App: React.FC = () => {
       if (res.ok) {
         const data: SubscriptionPlan = await res.json();
         setSubscription(data);
+      } else if (res.status === 404) {
+        // 404 is expected - API endpoint doesn't exist yet
+        console.warn('Subscription API not implemented (404)');
       }
     } catch (e) {
       // Silently handle network errors to prevent console spam
@@ -415,10 +419,17 @@ const App: React.FC = () => {
       return;
     }
     
+    if (loading) {
+      return; // Prevent multiple submissions
+    }
+    
+    setLoading(true);
+    
     // Validate slug before saving
     const trimmedSlug = slug.trim().toLowerCase();
     if (!isValidSlug(trimmedSlug)) {
       setError('Invalid slug. Use only lowercase letters, numbers, and hyphens. Avoid reserved words like "api", "admin", etc.');
+      setLoading(false);
       return;
     }
     
@@ -426,6 +437,7 @@ const App: React.FC = () => {
     const duplicateSlug = forms.find(f => f.slug === trimmedSlug && f.id !== editingId);
     if (duplicateSlug) {
       setError(`Slug "${trimmedSlug}" is already in use. Please choose a different slug.`);
+      setLoading(false);
       return;
     }
     
@@ -436,8 +448,12 @@ const App: React.FC = () => {
       templateId: templateId.trim(),
       roleName: roleName.trim(),
       apiDomain: apiDomain.trim(),
+      userId: userId || undefined,
       createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now()
     };
+    
+    console.log('Saving form:', formDef);
+    
     const res = await fetch('/api/forms', {
       method: 'POST',
       headers: {
@@ -446,15 +462,23 @@ const App: React.FC = () => {
       },
       body: JSON.stringify(formDef)
     });
+    
     if (!res.ok) {
       const msg = await res.text();
-      setError(`Save failed: ${msg}`);
+      console.error('Save form error:', res.status, msg);
+      if (res.status === 404) {
+        setError('Forms API not implemented yet. Please contact administrator.');
+      } else {
+        setError(`Save failed: ${msg}`);
+      }
+      setLoading(false);
       return;
     }
     const saved = await res.json();
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
     clearForm();
+    setLoading(false);
   };
 
   const deleteForm = async (id: string) => {
@@ -662,7 +686,7 @@ const App: React.FC = () => {
             </div>
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               <input type="email" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
-              <input type="password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
+              <input type="password" autoComplete="current-password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
               {error && (
                 <div className={`text-sm font-semibold rounded-2xl px-4 py-3 text-center ${darkMode ? 'text-red-300 bg-red-950 border border-red-900' : 'text-red-600 bg-red-50 border border-red-200'}`}>
                   {error}
@@ -742,8 +766,8 @@ const App: React.FC = () => {
                     </p>
                   </div>
 
-                  <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-lg font-black text-lg hover:bg-slate-800 transition-all shadow-lg">
-                    {editingId ? "Update Integration" : "Create Integration"}
+                  <button type="submit" disabled={loading} className="w-full bg-slate-900 text-white py-4 rounded-lg font-black text-lg hover:bg-slate-800 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                    {loading ? "Saving..." : (editingId ? "Update Integration" : "Create Integration")}
                   </button>
                 </form>
               </div>
