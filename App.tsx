@@ -327,9 +327,16 @@ const App: React.FC = () => {
           fetchSubscription(session.access_token)
         ]);
       } else {
+        // User logged out - clear all state
         setSessionToken(null);
         setUserId(null);
+        setAuth(null);
         setForms([]);
+        // Reset debounce flags to allow fresh fetches on next login
+        setFormsFetchAttempted(false);
+        setCredentialsFetchAttempted(false);
+        setSubscriptionFetchAttempted(false);
+        
         const hash = window.location.hash;
         const path = window.location.pathname || '/';
         if (hash.startsWith('#/admin')) {
