@@ -395,17 +395,35 @@ const App: React.FC = () => {
     if (!currentForm) return;
     setLoading(true);
     setError(null);
+    
+    console.log('=== SUBMISSION START ===');
+    console.log('Current form:', currentForm);
+    console.log('Signer data:', signer);
+    
     const res = await triggerZohoSignTemplate(currentForm, signer, false, {
       userId: currentForm.userId
     });
     
+    console.log('=== API RESPONSE ===');
+    console.log('Full response:', JSON.stringify(res, null, 2));
+    console.log('Success:', res.success);
+    console.log('Request ID:', res.requestId);
+    console.log('Signing URL:', res.signingUrl);
+    console.log('=== END RESPONSE ===');
+    
     if (res.success) {
       if (res.signingUrl) {
+        console.log('=== REDIRECTING ===');
+        console.log('Redirecting to:', res.signingUrl);
         window.location.href = res.signingUrl;
       } else {
+        console.log('=== NO SIGNING URL ===');
+        console.log('Showing success screen instead');
         setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
       }
     } else {
+      console.log('=== SUBMISSION FAILED ===');
+      console.log('Error:', res.error);
       setError(res.error || "Submission failed. Please try again.");
     }
     setLoading(false);
