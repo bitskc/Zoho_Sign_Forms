@@ -474,13 +474,16 @@ const App: React.FC = () => {
     
     if (res.success) {
       if (res.signingUrl) {
-        console.log('=== REDIRECTING ===');
+        console.log('=== REDIRECTING TO ZOHO SIGN ===');
         console.log('Redirecting to:', res.signingUrl);
+        // Redirect user directly to the Zoho Sign form
         window.location.href = res.signingUrl;
+        return; // Don't set loading to false, page is redirecting
       } else {
-        console.log('=== NO SIGNING URL ===');
-        console.log('Showing success screen instead');
-        setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
+        console.warn('=== WARNING: NO SIGNING URL RETURNED ===');
+        console.warn('This means the embed token API call may have failed.');
+        console.warn('User will receive email link instead of direct redirect.');
+        setSuccessData({ requestId: res.requestId!, signingUrl: undefined });
       }
     } else {
       console.log('=== SUBMISSION FAILED ===');
@@ -679,6 +682,7 @@ const App: React.FC = () => {
                 <form onSubmit={saveForm} className={`space-y-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
                   <div className="space-y-4">
                     <input required value={formName} onChange={e => setFormName(e.target.value)} placeholder="Display Name (e.g. NDA Agreement)" className={`w-full px-5 py-4 rounded-lg text-sm font-bold outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    <input required value={slug} onChange={e => setSlug(e.target.value)} placeholder="URL Slug (e.g. nda-agreement)" className={`w-full px-5 py-4 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                     <div className="grid grid-cols-2 gap-4">
                       <input required value={templateId} onChange={e => setTemplateId(e.target.value)} placeholder="Zoho Template ID" className={`w-full px-5 py-4 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                       <input required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="Role (e.g. Signer 1)" className={`w-full px-5 py-4 rounded-lg text-sm font-bold outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
