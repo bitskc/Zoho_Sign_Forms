@@ -352,17 +352,13 @@ const App: React.FC = () => {
           window.location.hash = '#/admin/login';
           setView(ViewMode.ADMIN_LOGIN);
         } else if (hash.startsWith('#/admin/login') || hash.startsWith('#/admin/signup') || hash === '#/admin') {
-          // Allow login/signup pages when not authenticated
-          // Don't redirect - let resolveRoute handle it
+          // Allow login/signup pages when not authenticated - don't change view
+          return;
         } else if (path !== '/' && !path.startsWith('/api')) {
           setView(ViewMode.PUBLIC_FORM);
-        } else {
-          if (hash !== '' && !hash.startsWith('#/admin')) {
-            window.location.hash = '';
-          }
-          if (!hash.startsWith('#/admin')) {
-            setView(ViewMode.LANDING);
-          }
+        } else if (hash === '' || hash === '/') {
+          // Only set to landing if we're actually on the root
+          setView(ViewMode.LANDING);
         }
       }
     });
