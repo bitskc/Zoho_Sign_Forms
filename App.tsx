@@ -13,7 +13,21 @@ declare global {
 }
 
 const App: React.FC = () => {
-  const [view, setView] = useState<ViewMode>(ViewMode.LANDING);
+  const getInitialView = () => {
+    const hash = window.location.hash || '';
+    const path = window.location.pathname || '/';
+    const effective = hash || `#${path}`;
+    
+    if (effective.startsWith('#/f/')) {
+      return ViewMode.PUBLIC_FORM;
+    } else if (effective.startsWith('#/admin')) {
+      return ViewMode.ADMIN_LOGIN;
+    }
+    return ViewMode.LANDING;
+  };
+  
+  const [view, setView] = useState<ViewMode>(getInitialView());
+  const [isRouteResolved, setIsRouteResolved] = useState(false);
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -188,14 +202,23 @@ const App: React.FC = () => {
         setSessionToken(data.session.access_token);
         setUserId(data.session.user.id);
         setAuth({ username: data.session.user.email || '', password: '' });
-        window.location.hash = '#/admin/dashboard';
-        setView(ViewMode.ADMIN_DASHBOARD);
+        
+        const hash = window.location.hash || '';
+        const path = window.location.pathname || '/';
+        const effective = hash || `#${path}`;
+        
+        if (!effective.startsWith('#/f/')) {
+          window.location.hash = '#/admin/dashboard';
+          setView(ViewMode.ADMIN_DASHBOARD);
+        }
+        
         await Promise.all([
           fetchForms(data.session.access_token),
           fetchCredentials(data.session.access_token),
           fetchSubscription(data.session.access_token)
         ]);
       }
+      setIsRouteResolved(true);
     };
     init();
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -376,7 +399,11 @@ const App: React.FC = () => {
       userId: currentForm.userId
     });
     if (res.success) {
-      setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
+      if (res.signingUrl) {
+        window.location.href = res.signingUrl;
+      } else {
+        setSuccessData({ requestId: res.requestId!, signingUrl: res.signingUrl });
+      }
     } else {
       setError(res.error || "Submission failed. Please try again.");
     }
@@ -734,10 +761,15 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {view === ViewMode.PUBLIC_FORM && currentForm && (
+      {view === ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className="w-full max-w-xl">
-            {!successData ? (
+            {!currentForm ? (
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-14 rounded-[2rem] shadow-2xl text-center`}>
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading form...</p>
+              </div>
+            ) : !successData ? (
               <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-14 rounded-[2rem] shadow-2xl animate-in fade-in duration-700`}>
                 <div className="text-center mb-12">
                   <div className={`inline-flex items-center justify-center w-20 h-20 rounded-xl mb-8 border ${darkMode ? 'bg-slate-800 text-blue-200 border-slate-700' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
