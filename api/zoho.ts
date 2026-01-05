@@ -191,6 +191,41 @@ export default async function handler(req: Request) {
       data.debug_hint = `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`;
     }
 
+    // For embedded signing, make the embedtoken API call to get the proper signing URL
+    if (response.ok && data.requests) {
+      const request = data.requests;
+      const actions = request?.actions || [];
+      const action = actions[0];
+      
+      if (action?.action_id && request?.request_id) {
+        try {
+          console.log('Making embedtoken API call...');
+          const host = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
+          const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken?host=${host}`;
+          console.log('Embed URL:', embedUrl);
+          
+          const embedResponse = await fetch(embedUrl, {
+            method: 'GET',
+            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+          });
+          
+          if (embedResponse.ok) {
+            const embedData = await embedResponse.json();
+            console.log('Embed response:', embedData);
+            // Update the action with the embed signing URL
+            if (embedData.sign_url) {
+              action.signing_url = embedData.sign_url;
+              console.log('Updated signing URL from embed token:', embedData.sign_url);
+            }
+          } else {
+            console.log('Embed token call failed:', embedResponse.status);
+          }
+        } catch (embedError) {
+          console.log('Error getting embed token:', embedError);
+        }
+      }
+    }
+
     return new Response(JSON.stringify(data), {
       status: response.status,
       headers: { 'Content-Type': 'application/json' }
