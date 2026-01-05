@@ -295,7 +295,7 @@ const App: React.FC = () => {
 
     window.addEventListener('hashchange', resolveRoute);
     window.addEventListener('popstate', resolveRoute);
-    resolveRoute();
+    
     const init = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
