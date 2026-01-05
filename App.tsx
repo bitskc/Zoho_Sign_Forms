@@ -449,6 +449,7 @@ const App: React.FC = () => {
       roleName: roleName.trim(),
       apiDomain: apiDomain.trim(),
       userId: userId || undefined,
+      accessToken: sessionToken, // Required by database
       createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now()
     };
     
@@ -726,7 +727,14 @@ const App: React.FC = () => {
                 {darkMode ? 'Light Mode' : 'Dark Mode'}
               </button>
               <button onClick={() => { window.location.hash = '#/admin/settings'; setView(ViewMode.ADMIN_SETTINGS); }} className={`px-4 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Settings</button>
-              <button onClick={() => setView(ViewMode.ADMIN_LOGIN)} className={`px-6 py-2.5 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
+              <button onClick={async () => {
+                await supabase.auth.signOut();
+                setSessionToken(null);
+                setUserId(null);
+                setAuth(null);
+                setView(ViewMode.ADMIN_LOGIN);
+                window.location.hash = '';
+              }} className={`px-6 py-2.5 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
             </div>
           </div>
 
@@ -855,7 +863,14 @@ const App: React.FC = () => {
             </div>
             <div className="flex gap-2">
               <button onClick={() => { window.location.hash = '#/admin/dashboard'; setView(ViewMode.ADMIN_DASHBOARD); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Back to Dashboard</button>
-              <button onClick={() => setView(ViewMode.ADMIN_LOGIN)} className={`px-5 py-2 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
+              <button onClick={async () => {
+                await supabase.auth.signOut();
+                setSessionToken(null);
+                setUserId(null);
+                setAuth(null);
+                setView(ViewMode.ADMIN_LOGIN);
+                window.location.hash = '';
+              }} className={`px-5 py-2 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
             </div>
           </div>
 
