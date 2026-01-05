@@ -91,17 +91,32 @@ const App: React.FC = () => {
   // Debounce flags to prevent infinite retry loops
   const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
   const [subscriptionFetchAttempted, setSubscriptionFetchAttempted] = useState(false);
+  const [formsFetchAttempted, setFormsFetchAttempted] = useState(false);
 
   const fetchForms = async (token: string) => {
-    const res = await fetch('/api/forms', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      setForms([]);
+    if (formsFetchAttempted) {
       return;
     }
-    const data = await res.json();
-    setForms(data || []);
+    
+    setFormsFetchAttempted(true);
+    
+    try {
+      const res = await fetch('/api/forms', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          console.warn('Forms API unauthorized (401) - session may have expired');
+        }
+        setForms([]);
+        return;
+      }
+      const data = await res.json();
+      setForms(data || []);
+    } catch (e) {
+      console.error('fetch forms error', e);
+      setForms([]);
+    }
   };
 
   const fetchFormBySlug = async (slugVal: string) => {
@@ -732,6 +747,11 @@ const App: React.FC = () => {
                 setSessionToken(null);
                 setUserId(null);
                 setAuth(null);
+                setForms([]);
+                // Reset debounce flags for next login
+                setFormsFetchAttempted(false);
+                setCredentialsFetchAttempted(false);
+                setSubscriptionFetchAttempted(false);
                 setView(ViewMode.ADMIN_LOGIN);
                 window.location.hash = '';
               }} className={`px-6 py-2.5 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
@@ -868,6 +888,11 @@ const App: React.FC = () => {
                 setSessionToken(null);
                 setUserId(null);
                 setAuth(null);
+                setForms([]);
+                // Reset debounce flags for next login
+                setFormsFetchAttempted(false);
+                setCredentialsFetchAttempted(false);
+                setSubscriptionFetchAttempted(false);
                 setView(ViewMode.ADMIN_LOGIN);
                 window.location.hash = '';
               }} className={`px-5 py-2 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
