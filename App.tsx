@@ -16,17 +16,20 @@ const App: React.FC = () => {
   const getInitialView = () => {
     const hash = window.location.hash || '';
     const path = window.location.pathname || '/';
-    const effective = hash || `#${path}`;
     const hostname = window.location.hostname;
     
-    if (effective.startsWith('#/f/')) {
+    // Check for path-based form URLs (e.g., /formslug)
+    if (path !== '/' && !path.startsWith('/api')) {
       return ViewMode.PUBLIC_FORM;
-    } else if (effective.startsWith('#/admin')) {
+    }
+    
+    // Check for hash-based admin routes
+    if (hash.startsWith('#/admin')) {
       return ViewMode.ADMIN_LOGIN;
     }
     
     // If on app subdomain and no hash, redirect to admin
-    if (hostname.startsWith('app.') && effective === '#/') {
+    if (hostname.startsWith('app.') && hash === '' && path === '/') {
       window.location.hash = '#/admin';
       return ViewMode.ADMIN_LOGIN;
     }
@@ -169,10 +172,10 @@ const App: React.FC = () => {
     const resolveRoute = () => {
       const hash = window.location.hash || '';
       const path = window.location.pathname || '/';
-      const effective = hash || `#${path}`;
 
-      if (effective.startsWith('#/f/')) {
-        const slugVal = effective.replace('#/f/', '').replace(/\/$/, '');
+      // Handle path-based form URLs (e.g., /formslug)
+      if (path !== '/' && !path.startsWith('/api')) {
+        const slugVal = path.substring(1).replace(/\/$/, '');
         const found = forms.find(f => f.slug === slugVal);
         if (found) {
           setCurrentForm(found);
@@ -182,17 +185,17 @@ const App: React.FC = () => {
         } else {
           setView(ViewMode.NOT_FOUND);
         }
-      } else if (effective.startsWith('#/admin/signup')) {
+      } else if (hash.startsWith('#/admin/signup')) {
         setAuthMode('signup');
         setView(ViewMode.ADMIN_LOGIN);
         window.location.hash = '#/admin/signup';
-      } else if (effective.startsWith('#/admin/login') || effective === '#/admin') {
+      } else if (hash.startsWith('#/admin/login') || hash === '#/admin') {
         setAuthMode('login');
         setView(ViewMode.ADMIN_LOGIN);
         window.location.hash = '#/admin/login';
-      } else if (effective.startsWith('#/admin/dashboard')) {
+      } else if (hash.startsWith('#/admin/dashboard')) {
         setView(ViewMode.ADMIN_DASHBOARD);
-      } else if (effective.startsWith('#/admin/settings')) {
+      } else if (hash.startsWith('#/admin/settings')) {
         setView(ViewMode.ADMIN_SETTINGS);
       } else {
         if (hash !== '') {
@@ -203,6 +206,7 @@ const App: React.FC = () => {
     };
 
     window.addEventListener('hashchange', resolveRoute);
+    window.addEventListener('popstate', resolveRoute);
     resolveRoute();
     const init = async () => {
       const { data } = await supabase.auth.getSession();
@@ -213,9 +217,9 @@ const App: React.FC = () => {
         
         const hash = window.location.hash || '';
         const path = window.location.pathname || '/';
-        const effective = hash || `#${path}`;
         
-        if (!effective.startsWith('#/f/')) {
+        // Don't redirect if viewing a public form
+        if (path === '/' || path.startsWith('/api')) {
           window.location.hash = '#/admin/dashboard';
           setView(ViewMode.ADMIN_DASHBOARD);
         }
@@ -244,10 +248,11 @@ const App: React.FC = () => {
         setUserId(null);
         setForms([]);
         const hash = window.location.hash;
+        const path = window.location.pathname || '/';
         if (hash.startsWith('#/admin')) {
           window.location.hash = '';
           setView(ViewMode.LANDING);
-        } else if (hash.startsWith('#/f/')) {
+        } else if (path !== '/' && !path.startsWith('/api')) {
           setView(ViewMode.PUBLIC_FORM);
         } else {
           if (hash !== '') {
@@ -532,7 +537,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="p-4 rounded-2xl border border-white/10 bg-gradient-to-r from-blue-600/40 to-indigo-600/40">
                       <p className="text-sm font-semibold text-slate-100">Copy and share</p>
-                      <p className="text-xs text-slate-200 font-mono">https://yourdomain.com/#/f/nda-proposal</p>
+                      <p className="text-xs text-slate-200 font-mono">https://yourdomain.com/nda-proposal</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-xs text-center">
@@ -689,9 +694,9 @@ const App: React.FC = () => {
                              <span className="text-[10px] bg-slate-900 text-slate-200 px-2 py-1 rounded font-mono">Live</span>
                           </div>
                           <div className="flex items-center gap-2 group">
-                             <code className={`text-[10px] font-bold px-2 py-1 rounded ${darkMode ? 'text-blue-200 bg-blue-900/40' : 'text-blue-600 bg-blue-50/50'}`}>/f/{form.slug}</code>
+                             <code className={`text-[10px] font-bold px-2 py-1 rounded ${darkMode ? 'text-blue-200 bg-blue-900/40' : 'text-blue-600 bg-blue-50/50'}`}>/{form.slug}</code>
                              <button onClick={() => {
-                                const url = `${window.location.origin}${window.location.pathname}#/f/${form.slug}`;
+                                const url = `${window.location.origin}/${form.slug}`;
                                 navigator.clipboard.writeText(url);
                                 alert("Link copied to clipboard!");
                              }} className={`${darkMode ? 'text-slate-400 hover:text-blue-300' : 'text-slate-300 hover:text-blue-500'} p-1`}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg></button>
