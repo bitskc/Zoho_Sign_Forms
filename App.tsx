@@ -686,7 +686,7 @@ const App: React.FC = () => {
               </p>
             </div>
             <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <input type="email" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
+              <input type="email" autoComplete="username" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
               <input type="password" autoComplete="current-password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
               {error && (
                 <div className={`text-sm font-semibold rounded-2xl px-4 py-3 text-center ${darkMode ? 'text-red-300 bg-red-950 border border-red-900' : 'text-red-600 bg-red-50 border border-red-200'}`}>
