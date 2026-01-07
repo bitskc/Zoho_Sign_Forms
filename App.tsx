@@ -4,6 +4,7 @@ import { ViewMode, FormDefinition, SignerData, UserCredentials, SubscriptionPlan
 import Header from './components/Header';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
+import { getRouteContext, buildFormUrl } from './services/routingService';
 
 // Reserved slugs that cannot be used for forms
 const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico'];
@@ -27,6 +28,17 @@ declare global {
 }
 
 const App: React.FC = () => {
+  const routeContext = getRouteContext();
+
+  // If a user hits the bare root domain (e.g. signflow.ink), send them to www with full path
+  if (routeContext.subdomain === 'root') {
+    const hostnameParts = window.location.hostname.split('.').slice(-2);
+    const baseDomain = hostnameParts.join('.');
+    const targetUrl = `${window.location.protocol}//www.${baseDomain}${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(targetUrl);
+    return null;
+  }
+
   const getInitialView = () => {
     const hash = window.location.hash || '';
     const path = window.location.pathname || '/';
@@ -51,7 +63,7 @@ const App: React.FC = () => {
     return ViewMode.LANDING;
   };
   
-  const [view, setView] = useState<ViewMode | null>(null);
+  const [view, setView] = useState<ViewMode | null>(getInitialView());
   const [isRouteResolved, setIsRouteResolved] = useState(false);
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
@@ -365,6 +377,7 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('hashchange', resolveRoute);
       window.removeEventListener('popstate', resolveRoute);
+      listener?.subscription.unsubscribe();
     };
   }, [forms, isRouteResolved]);
 
@@ -593,6 +606,14 @@ const App: React.FC = () => {
       window.open(url, '_blank');
     }
   };
+
+  // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
+  useEffect(() => {
+    if (routeContext.subdomain === 'app' && routeContext.isFormSlug && routeContext.formSlug) {
+      const wwwUrl = buildFormUrl(routeContext.formSlug);
+      window.location.replace(wwwUrl);
+    }
+  }, [routeContext]);
 
   useEffect(() => {
     if (darkMode) {
