@@ -192,37 +192,60 @@ export default async function handler(req: Request) {
     }
 
     // For embedded signing, make the embedtoken API call to get the proper signing URL
+    // This is now MANDATORY for successful sign requests
     if (response.ok && data.requests) {
       const request = data.requests;
       const actions = request?.actions || [];
       const action = actions[0];
       
       if (action?.action_id && request?.request_id) {
+        console.log('Making embedtoken API call...');
+        const host = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
+        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken?host=${host}`;
+        console.log('Embed URL:', embedUrl);
+        
         try {
-          console.log('Making embedtoken API call...');
-          const host = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
-          const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken?host=${host}`;
-          console.log('Embed URL:', embedUrl);
-          
           const embedResponse = await fetch(embedUrl, {
             method: 'GET',
             headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
           });
           
-          if (embedResponse.ok) {
-            const embedData = await embedResponse.json();
-            console.log('Embed response:', embedData);
-            // Update the action with the embed signing URL
-            if (embedData.sign_url) {
-              action.signing_url = embedData.sign_url;
-              console.log('Updated signing URL from embed token:', embedData.sign_url);
-            }
-          } else {
-            console.log('Embed token call failed:', embedResponse.status);
+          if (!embedResponse.ok) {
+            const embedErrorText = await embedResponse.text();
+            console.error('Embed token call failed:', embedResponse.status, embedErrorText);
+            return new Response(JSON.stringify({
+              error: 'Embed Token Failed',
+              message: `Failed to get embed signing URL. Status: ${embedResponse.status}`,
+              hint: 'Ensure your domain is whitelisted in Zoho Sign for embedded signing.',
+              details: embedErrorText
+            }), { status: 400 });
           }
+          
+          const embedData = await embedResponse.json();
+          console.log('Embed response:', embedData);
+          
+          // Update the action with the embed signing URL
+          if (!embedData.sign_url) {
+            console.error('No sign_url in embed response');
+            return new Response(JSON.stringify({
+              error: 'Invalid Embed Response',
+              message: 'Embed token response did not contain a signing URL',
+              hint: 'Check Zoho Sign configuration for embedded signing'
+            }), { status: 400 });
+          }
+          
+          action.signing_url = embedData.sign_url;
+          console.log('Updated signing URL from embed token:', embedData.sign_url);
         } catch (embedError) {
-          console.log('Error getting embed token:', embedError);
+          console.error('Error getting embed token:', embedError);
+          return new Response(JSON.stringify({
+            error: 'Embed Token Error',
+            message: 'Failed to retrieve embed signing URL',
+            details: (embedError as Error).message
+          }), { status: 500 });
         }
+      } else {
+        console.warn('Missing action_id or request_id for embed token call');
       }
     }
 
