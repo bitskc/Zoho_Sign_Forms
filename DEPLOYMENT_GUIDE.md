@@ -143,6 +143,14 @@ If embed token API calls fail:
 
 #### Troubleshooting Embedded Signing
 
+**Error: "Bridge Error: Load failed"**
+- **Cause:** The `host` parameter in the embed token request doesn't match your actual domain
+- **Solution:** Set `PUBLIC_URL=https://your-actual-domain.com` in Vercel environment variables (must match exactly, including https://)
+- **Solution:** Verify the domain in Vercel matches what's in PUBLIC_URL (check for www vs non-www)
+- **Cause:** Zoho Sign widget JavaScript not loading properly
+- **Solution:** Check browser console for CORS or loading errors
+- **Solution:** Ensure the signing URL is being opened correctly in the frontend
+
 **Error: "Embed token request failed"**
 - **Cause:** Your Zoho Sign plan may not support embedded signing
 - **Solution:** Upgrade to a plan that includes API and embedded signing features
@@ -151,6 +159,7 @@ If embed token API calls fail:
 **Error: "Invalid host parameter"**
 - **Cause:** `PUBLIC_URL` environment variable not set correctly
 - **Solution:** Set `PUBLIC_URL=https://your-actual-domain.com` in Vercel
+- **Important:** Must include `https://` protocol and exact domain (with or without www)
 
 **Users receive email links instead of direct redirect:**
 - **Cause:** Embed token API call is failing silently

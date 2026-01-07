@@ -200,14 +200,20 @@ export default async function handler(req: Request) {
       
       if (action?.action_id && request?.request_id) {
         console.log('Making embedtoken API call...');
-        const host = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
-        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken?host=${host}`;
+        // Use PUBLIC_URL environment variable for security (prevents header-based attacks)
+        const host = process.env.PUBLIC_URL || 'https://zoho-sign-forms.vercel.app';
+        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
         console.log('Embed URL:', embedUrl);
+        console.log('Host parameter:', host);
         
         try {
           const embedResponse = await fetch(embedUrl, {
-            method: 'GET',
-            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+            method: 'POST',
+            headers: { 
+              'Authorization': `Zoho-oauthtoken ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ host })
           });
           
           if (!embedResponse.ok) {
