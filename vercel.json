@@ -18,6 +18,10 @@
       "destination": "/api/:path*"
     },
     {
+      "source": "/qr/:stableId",
+      "destination": "/api/qr-redirect?id=:stableId"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }
