@@ -1,7 +1,8 @@
 import { supabaseServer } from './_supabaseServer';
 import QRCode from 'qrcode';
 
-export const config = { runtime: 'edge' };
+// Use Node.js runtime for QR code generation (requires 'fs', 'stream', 'zlib' modules)
+export const config = { runtime: 'nodejs' };
 
 async function getUserFromAuthHeader(req: Request) {
   const authHeader = req.headers.get('Authorization');
