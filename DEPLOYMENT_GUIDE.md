@@ -73,44 +73,92 @@ After deployment, verify these features are working:
    - Check browser console for errors
    - Review Vercel function logs
 
-### Step 4: Whitelist Your Domain in Zoho Sign (Critical)
+### Step 4: Configure Embedded Signing in Zoho Sign (Critical)
 
-For the direct redirect to work, your domain must be whitelisted in Zoho Sign:
+For the direct redirect to work, you must configure embedded signing in Zoho Sign. This is done automatically through the API when generating embed tokens, but you need to ensure your Zoho Sign account supports embedded signing.
 
-**Method 1: Using Zoho Sign API (Recommended)**
+**📚 Official Documentation:** [Zoho Sign Embedded Signing Guide](https://www.zoho.com/sign/api/embedded-signing.html)
 
-The domain whitelist is managed via the Zoho Sign API. You need to add your domain to the allowed embed domains list:
+#### Understanding Embedded Signing
 
-1. Use the Zoho Sign API endpoint: `POST {api-domain}/api/v1/settings/embed`
-2. Include your domain in the request body:
-   ```json
-   {
-     "embed_url": "https://www.signflow.ink"
-   }
-   ```
-3. Use your OAuth token for authentication
+Embedded signing allows users to sign documents directly within your application (iframe/embedded view) instead of receiving email links. The implementation in this project uses the **embed token API** approach:
 
-**Method 2: Contact Zoho Support**
+1. **How it works:**
+   - User submits form with name/email
+   - Backend calls Zoho Sign API to create a signing request
+   - Backend requests an **embed token** for that specific signer
+   - User is redirected to the embed URL (opens Zoho Sign in your app context)
+   - After signing, user returns to your app
 
-If you don't have API access or prefer support assistance:
+2. **What you need:**
+   - Zoho Sign account with API access
+   - Valid OAuth tokens (already configured via environment variables)
+   - Embed signing enabled on your account (most plans support this)
 
-1. Contact Zoho Sign support at support@zohosign.com
-2. Request to whitelist your production domain(s) for embedded signing
-3. Provide: `https://www.signflow.ink` (and any other domains)
+#### Configuration Steps
 
-**Method 3: Check Admin Console Settings**
+**Method 1: Automatic (Recommended)**
 
-The location may vary by Zoho Sign account type:
+The embed token is requested automatically via the API when a user submits a form. The code already handles this in `/api/zoho.ts`:
+
+```typescript
+// Embed token request happens automatically
+const embedResponse = await fetch(
+  `${apiDomain}/api/v1/requests/${requestId}/actions/${actionId}/embedtoken`,
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Zoho-oauthtoken ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      host: process.env.PUBLIC_URL || 'https://www.signflow.ink'
+    })
+  }
+);
+```
+
+**No manual whitelisting is typically required** - the API handles domain validation automatically when you provide the `host` parameter.
+
+**Method 2: Verify Account Settings (Optional)**
+
+To confirm embedded signing is enabled on your account:
 
 1. Log into [Zoho Sign](https://sign.zoho.com)
-2. Navigate to **Settings** (gear icon) or **Admin Console**
-3. Look for **API & Integrations**, **Developer Settings**, or **Security Settings**
-4. Find embed/iframe whitelist settings
-5. Add your production domain
+2. Go to **Setup** or **Settings** (gear icon)
+3. Check under **API** or **Developer** settings
+4. Verify that API access is enabled
+5. Confirm your plan supports embedded signing (most paid plans do)
 
-**Note:** The exact path varies based on your Zoho Sign account plan and region. If you can't find the setting, use Method 1 (API) or Method 2 (Support).
+**Method 3: Contact Support (If Issues Occur)**
 
-**Without proper domain whitelisting, users will receive email links instead of direct redirects.**
+If embed token API calls fail:
+
+1. Check Vercel function logs for specific error messages
+2. Verify your Zoho Sign plan supports embedded signing
+3. Contact Zoho Sign support at support@zohosign.com with:
+   - Your account email
+   - Error messages from API calls
+   - Request to enable embedded signing features
+
+#### Troubleshooting Embedded Signing
+
+**Error: "Embed token request failed"**
+- **Cause:** Your Zoho Sign plan may not support embedded signing
+- **Solution:** Upgrade to a plan that includes API and embedded signing features
+- **Solution:** Contact Zoho support to enable embedded signing
+
+**Error: "Invalid host parameter"**
+- **Cause:** `PUBLIC_URL` environment variable not set correctly
+- **Solution:** Set `PUBLIC_URL=https://your-actual-domain.com` in Vercel
+
+**Users receive email links instead of direct redirect:**
+- **Cause:** Embed token API call is failing silently
+- **Check:** Vercel function logs for `/api/zoho` endpoint
+- **Verify:** OAuth tokens are valid and not expired
+- **Verify:** API access is enabled in Zoho Sign settings
+
+**Without working embedded signing, users will receive email links to sign documents instead of being redirected directly.**
 
 ### Step 5: Monitor for Errors
 
@@ -139,13 +187,17 @@ After deployment, monitor these:
 - **Solution:** Verify `SUPABASE_SERVICE_ROLE` environment variable is set
 
 **Issue: Direct Redirect Not Working**
-- **Cause:** Domain not whitelisted in Zoho Sign
-- **Solution:** Follow Step 4 above (use API method or contact support)
-- **Solution:** Verify the embed token API endpoint is accessible
+- **Cause:** Embed signing not enabled or supported on your Zoho Sign plan
+- **Solution:** Check [Zoho Sign Embedded Signing Documentation](https://www.zoho.com/sign/api/embedded-signing.html)
+- **Solution:** Verify your account plan supports embedded signing features
+- **Solution:** Contact Zoho support if your plan should support it but doesn't work
 - **Cause:** Embed token API call failing
-- **Solution:** Check Vercel function logs for Zoho API errors
-- **Solution:** Verify Zoho credentials are still valid
-- **Solution:** Check if your Zoho Sign plan supports embedded signing
+- **Solution:** Check Vercel function logs for `/api/zoho` endpoint errors
+- **Solution:** Verify OAuth tokens are valid and not expired
+- **Solution:** Ensure `PUBLIC_URL` environment variable is set correctly
+- **Cause:** API access not enabled
+- **Solution:** Enable API access in Zoho Sign settings
+- **Solution:** Verify OAuth credentials have proper permissions
 
 **Issue: QR Code Redirect Returns 404**
 - **Cause:** Vercel routing not configured
