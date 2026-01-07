@@ -100,6 +100,12 @@ const App: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionPlan | null>(null);
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
   
+  // QR Code and Analytics states
+  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
+  const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
+  const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
+
+  
   // Debounce flags to prevent infinite retry loops
   const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
   const [subscriptionFetchAttempted, setSubscriptionFetchAttempted] = useState(false);
@@ -563,6 +569,9 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     
+    // Track submit_start event
+    trackAnalytics(currentForm.id, 'submit_start', { name: signer.name, email: signer.email });
+    
     console.log('=== SUBMISSION START ===');
     console.log('Current form:', currentForm);
     console.log('Signer data:', signer);
@@ -579,6 +588,9 @@ const App: React.FC = () => {
     console.log('=== END RESPONSE ===');
     
     if (res.success) {
+      // Track successful submission
+      trackAnalytics(currentForm.id, 'submit_success', { name: signer.name, email: signer.email });
+      
       if (res.signingUrl) {
         console.log('=== REDIRECTING TO ZOHO SIGN ===');
         console.log('Redirecting to:', res.signingUrl);
@@ -592,6 +604,9 @@ const App: React.FC = () => {
         setSuccessData({ requestId: res.requestId!, signingUrl: undefined });
       }
     } else {
+      // Track failed submission
+      trackAnalytics(currentForm.id, 'submit_error', { name: signer.name, email: signer.email, error: res.error });
+      
       console.log('=== SUBMISSION FAILED ===');
       console.log('Error:', res.error);
       setError(res.error || "Submission failed. Please try again.");
@@ -606,6 +621,105 @@ const App: React.FC = () => {
       window.open(url, '_blank');
     }
   };
+
+  // Analytics tracking function
+  const trackAnalytics = async (formId: string, eventType: 'visit' | 'submit_start' | 'submit_success' | 'submit_error', data?: { name?: string; email?: string; error?: string }) => {
+    try {
+      await fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formId,
+          eventType,
+          visitorEmail: data?.email,
+          visitorName: data?.name,
+          referrer: document.referrer || undefined,
+          userAgent: navigator.userAgent,
+          metadata: data?.error ? { error: data.error } : undefined
+        })
+      });
+    } catch (e) {
+      console.warn('Analytics tracking failed:', e);
+      // Don't block the user flow if analytics fails
+    }
+  };
+
+  // Fetch QR code for a form
+  const fetchQRCode = async (formId: string) => {
+    if (!sessionToken) return;
+    setLoadingQR(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch(`/api/qrcodes?formId=${formId}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      } else if (res.status === 404) {
+        // QR code doesn't exist, generate it
+        await generateQRCode(formId);
+      }
+    } catch (e) {
+      console.error('Failed to fetch QR code:', e);
+    } finally {
+      setLoadingQR(prev => {
+        const next = new Set(prev);
+        next.delete(formId);
+        return next;
+      });
+    }
+  };
+
+  // Generate QR code for a form
+  const generateQRCode = async (formId: string) => {
+    if (!sessionToken) return;
+    setLoadingQR(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch('/api/qrcodes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ formId, regenerate: false })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      }
+    } catch (e) {
+      console.error('Failed to generate QR code:', e);
+    } finally {
+      setLoadingQR(prev => {
+        const next = new Set(prev);
+        next.delete(formId);
+        return next;
+      });
+    }
+  };
+
+  // Fetch analytics for a form
+  const fetchAnalytics = async (formId: string) => {
+    if (!sessionToken) return;
+    
+    try {
+      const res = await fetch(`/api/analytics?formId=${formId}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(prev => new Map(prev).set(formId, data));
+      }
+    } catch (e) {
+      console.error('Failed to fetch analytics:', e);
+    }
+  };
+
 
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
@@ -622,6 +736,14 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // Track visit analytics when form is viewed
+  useEffect(() => {
+    if (view === ViewMode.PUBLIC_FORM && currentForm?.id) {
+      trackAnalytics(currentForm.id, 'visit');
+    }
+  }, [view, currentForm?.id]);
+
 
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -879,7 +1001,7 @@ const App: React.FC = () => {
                              <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-50 text-blue-600'}`}>{form.apiDomain.split('.').pop()}</span>
                              <span className="text-[10px] bg-slate-900 text-slate-200 px-2 py-1 rounded font-mono">Live</span>
                           </div>
-                          <div className="flex items-center gap-2 group">
+                          <div className="flex items-center gap-2 group mb-3">
                              <code className={`text-[10px] font-bold px-2 py-1 rounded ${darkMode ? 'text-blue-200 bg-blue-900/40' : 'text-blue-600 bg-blue-50/50'}`}>/{form.slug}</code>
                              <button onClick={() => {
                                 const url = `${window.location.origin}/${form.slug}`;
@@ -887,6 +1009,35 @@ const App: React.FC = () => {
                                 alert("Link copied to clipboard!");
                              }} className={`${darkMode ? 'text-slate-400 hover:text-blue-300' : 'text-slate-300 hover:text-blue-500'} p-1`}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg></button>
                           </div>
+                          {/* QR Code Section */}
+                          <div className="flex items-center gap-2">
+                            {qrCodes.has(form.id) ? (
+                              <>
+                                <img src={qrCodes.get(form.id)} alt="QR Code" className="w-12 h-12 rounded border border-slate-700" />
+                                <button onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = qrCodes.get(form.id)!;
+                                  link.download = `${form.slug}-qr.png`;
+                                  link.click();
+                                }} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}>Download QR</button>
+                              </>
+                            ) : (
+                              <button onClick={() => fetchQRCode(form.id)} disabled={loadingQR.has(form.id)} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} disabled:opacity-50`}>
+                                {loadingQR.has(form.id) ? 'Generating...' : 'Generate QR Code'}
+                              </button>
+                            )}
+                          </div>
+                          {/* Analytics Preview */}
+                          {analytics.has(form.id) && (
+                            <div className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                              📊 {analytics.get(form.id).summary.totalVisits} visits · {analytics.get(form.id).summary.successfulSubmissions} submissions
+                            </div>
+                          )}
+                          {!analytics.has(form.id) && sessionToken && (
+                            <button onClick={() => fetchAnalytics(form.id)} className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'}`}>
+                              View Analytics
+                            </button>
+                          )}
                         </td>
                         <td className="px-6 py-6">
                           <div className="flex items-center justify-end gap-2">
