@@ -61,7 +61,11 @@ export default async function handler(req: Request) {
     if (error) {
       console.error('Analytics error:', error);
       // Don't fail the request if analytics fails - just log it
-      return new Response(JSON.stringify({ success: true, warning: 'Analytics recording failed' }), { status: 200 });
+      return new Response(JSON.stringify({ 
+        success: true, 
+        warning: 'Analytics recording failed', 
+        error: error.message || 'Unknown error' 
+      }), { status: 200 });
     }
 
     return new Response(JSON.stringify({ success: true, id: data.id }), { status: 200 });

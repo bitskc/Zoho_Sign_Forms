@@ -216,8 +216,7 @@ export default async function handler(req: Request) {
             return new Response(JSON.stringify({
               error: 'Embed Token Failed',
               message: `Failed to get embed signing URL. Status: ${embedResponse.status}`,
-              hint: 'Ensure your domain is whitelisted in Zoho Sign for embedded signing.',
-              details: embedErrorText
+              hint: 'Ensure your domain is whitelisted in Zoho Sign for embedded signing.'
             }), { status: 400 });
           }
           

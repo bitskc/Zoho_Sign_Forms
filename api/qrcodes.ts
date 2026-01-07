@@ -112,8 +112,9 @@ export default async function handler(req: Request) {
     }
 
     // Generate QR code URL pointing to the stable redirect endpoint
-    const origin = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
-    const qrUrl = `${origin}/qr/${stableId}`;
+    // Use environment variable or hardcoded production URL for security
+    const baseUrl = process.env.PUBLIC_URL || 'https://zoho-sign-forms.vercel.app';
+    const qrUrl = `${baseUrl}/qr/${stableId}`;
 
     // Generate QR code as data URL
     const qrCodeData = await QRCode.toDataURL(qrUrl, {

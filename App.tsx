@@ -1029,8 +1029,8 @@ const App: React.FC = () => {
                           </div>
                           {/* Analytics Preview */}
                           {analytics.has(form.id) && (
-                            <div className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                              📊 {analytics.get(form.id).summary.totalVisits} visits · {analytics.get(form.id).summary.successfulSubmissions} submissions
+                            <div className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`} aria-label="Analytics summary">
+                              Analytics: {analytics.get(form.id).summary.totalVisits} visits · {analytics.get(form.id).summary.successfulSubmissions} submissions
                             </div>
                           )}
                           {!analytics.has(form.id) && sessionToken && (

@@ -30,8 +30,8 @@ export default async function handler(req: Request) {
   }
 
   // Build the redirect URL to the form slug
-  const origin = req.headers.get('origin') || req.headers.get('host') || 'https://zoho-sign-forms.vercel.app';
-  const baseUrl = origin.startsWith('http') ? origin : `https://${origin}`;
+  // Use environment variable or hardcoded production URL for security
+  const baseUrl = process.env.PUBLIC_URL || 'https://zoho-sign-forms.vercel.app';
   const redirectUrl = `${baseUrl}/${formData.slug}`;
 
   // Return redirect response
