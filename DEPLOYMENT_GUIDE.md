@@ -75,16 +75,42 @@ After deployment, verify these features are working:
 
 ### Step 4: Whitelist Your Domain in Zoho Sign (Critical)
 
-For the direct redirect to work, your domain must be whitelisted:
+For the direct redirect to work, your domain must be whitelisted in Zoho Sign:
+
+**Method 1: Using Zoho Sign API (Recommended)**
+
+The domain whitelist is managed via the Zoho Sign API. You need to add your domain to the allowed embed domains list:
+
+1. Use the Zoho Sign API endpoint: `POST {api-domain}/api/v1/settings/embed`
+2. Include your domain in the request body:
+   ```json
+   {
+     "embed_url": "https://www.signflow.ink"
+   }
+   ```
+3. Use your OAuth token for authentication
+
+**Method 2: Contact Zoho Support**
+
+If you don't have API access or prefer support assistance:
+
+1. Contact Zoho Sign support at support@zohosign.com
+2. Request to whitelist your production domain(s) for embedded signing
+3. Provide: `https://www.signflow.ink` (and any other domains)
+
+**Method 3: Check Admin Console Settings**
+
+The location may vary by Zoho Sign account type:
 
 1. Log into [Zoho Sign](https://sign.zoho.com)
-2. Go to **Settings** → **Integrations** → **Embed Sign**
-3. Add your production domain to the whitelist:
-   - `https://www.signflow.ink` (or your domain)
-   - Include both `www` and non-`www` versions if needed
-4. Save settings
+2. Navigate to **Settings** (gear icon) or **Admin Console**
+3. Look for **API & Integrations**, **Developer Settings**, or **Security Settings**
+4. Find embed/iframe whitelist settings
+5. Add your production domain
 
-**Without this step, users will receive email links instead of direct redirects.**
+**Note:** The exact path varies based on your Zoho Sign account plan and region. If you can't find the setting, use Method 1 (API) or Method 2 (Support).
+
+**Without proper domain whitelisting, users will receive email links instead of direct redirects.**
 
 ### Step 5: Monitor for Errors
 
@@ -114,10 +140,12 @@ After deployment, monitor these:
 
 **Issue: Direct Redirect Not Working**
 - **Cause:** Domain not whitelisted in Zoho Sign
-- **Solution:** Follow Step 4 above
+- **Solution:** Follow Step 4 above (use API method or contact support)
+- **Solution:** Verify the embed token API endpoint is accessible
 - **Cause:** Embed token API call failing
 - **Solution:** Check Vercel function logs for Zoho API errors
 - **Solution:** Verify Zoho credentials are still valid
+- **Solution:** Check if your Zoho Sign plan supports embedded signing
 
 **Issue: QR Code Redirect Returns 404**
 - **Cause:** Vercel routing not configured
