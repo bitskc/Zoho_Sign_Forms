@@ -32,7 +32,7 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
   return data;
 }
 
-import { supabaseServer } from './_supabaseServer';
+import { supabaseServer } from './_supabaseServer.js';
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
