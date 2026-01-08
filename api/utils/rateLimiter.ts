@@ -15,6 +15,17 @@ type RateLimitStore = Map<RateLimitKey, number[]>;
 
 // In-memory store for request timestamps
 // In production with multiple regions/invocations, use Vercel KV
+const isEdgeRuntime =
+  typeof (globalThis as any).EdgeRuntime !== 'undefined';
+
+if (isEdgeRuntime) {
+  // This implementation will not enforce rate limits across Edge isolates/regions.
+  // For production use, replace this with a distributed store such as Vercel KV.
+  console.warn(
+    '[RateLimiter] In-memory rate limiting is not effective in Vercel Edge Runtime. Use Vercel KV or another distributed store in production.'
+  );
+}
+
 const requestTimestamps: RateLimitStore = new Map();
 
 interface RateLimitConfig {
@@ -75,12 +86,14 @@ export function checkRateLimit(
   const requestCount = validTimestamps.length;
   const allowed = requestCount < config.maxRequests;
 
-  // Update the store
-  validTimestamps.push(now);
-  requestTimestamps.set(key, validTimestamps);
+  // Update the store only for allowed requests
+  if (allowed) {
+    validTimestamps.push(now);
+    requestTimestamps.set(key, validTimestamps);
+  }
 
-  const remaining = Math.max(0, config.maxRequests - requestCount - 1);
-  const resetTime = Math.max(...validTimestamps) + config.windowMs;
+  const remaining = Math.max(0, config.maxRequests - requestCount - (allowed ? 1 : 0));
+  const resetTime = validTimestamps.length > 0 ? Math.max(...validTimestamps) + config.windowMs : now + config.windowMs;
   const retryAfter = allowed ? undefined : Math.ceil((resetTime - now) / 1000);
 
   return {

@@ -81,7 +81,7 @@ SUBSCRIPTION: 20 requests per 5 min    // Less frequent
 - Logs template fetch, role validation, document creation
 - Logs embed token generation
 - Improved error messages with context
-- All `console.log` statements replaced with structured logging
+- `console.log` usage is being migrated to structured logging; new logging uses the structured logger and remaining console statements will be phased out
 
 ### `api/credentials.ts`
 - Rate limiting on all credential operations

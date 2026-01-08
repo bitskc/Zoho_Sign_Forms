@@ -42,7 +42,7 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
 }
 
 export default async function handler(req: Request) {
-  const { requestId, logger, logResponse, logError } = createRequestLogger(req);
+  const { logger, logResponse } = createRequestLogger(req);
   
   // Periodic cleanup
   if (Math.random() < 0.01) {
@@ -63,12 +63,11 @@ export default async function handler(req: Request) {
       apiDomain,
       clientId: clientId ? '[PROVIDED]' : '[ENV]',
       clientSecret: clientSecret ? '[PROVIDED]' : '[ENV]',
-      userId: userId ? '[PROVIDED]' : undefined,
       templateId: body.templateId?.slice(0, 8),
     }));
 
-    // Apply rate limiting
-    const rateLimitKey = getRateLimitKey(req, userId);
+    // Apply rate limiting (IP-based for untrusted requests)
+    const rateLimitKey = getRateLimitKey(req);
     const rateLimitCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.ZOHO_API);
     
     if (!rateLimitCheck.allowed) {
@@ -76,6 +75,7 @@ export default async function handler(req: Request) {
         limitKey: rateLimitKey,
         retryAfter: rateLimitCheck.retryAfter,
       });
+      logResponse(429);
       return createRateLimitResponse(rateLimitCheck);
     }
 
