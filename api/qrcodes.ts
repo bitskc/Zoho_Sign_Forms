@@ -1,4 +1,4 @@
-import { supabaseServer } from './_supabaseServer';
+import { supabaseServer } from './_supabaseServer.js';
 import QRCode from 'qrcode';
 
 // Use Node.js runtime for QR code generation (requires 'fs', 'stream', 'zlib' modules)

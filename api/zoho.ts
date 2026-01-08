@@ -1,3 +1,4 @@
+import { supabaseServer } from './_supabaseServer.js';
 
 export const config = {
   runtime: 'edge',
@@ -31,8 +32,6 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
   }
   return data;
 }
-
-import { supabaseServer } from './_supabaseServer';
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
