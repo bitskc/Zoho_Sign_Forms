@@ -38,7 +38,7 @@ interface LogEntry {
  * Generate a unique request ID for tracing
  */
 export function generateRequestId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 /**
@@ -108,7 +108,7 @@ export function createRequestLogger(req: Request) {
   });
 
   logger.info('Request received', {
-    url: req.url,
+    url: pathname,
     headers: {
       'user-agent': req.headers.get('user-agent') || 'unknown',
       'content-type': req.headers.get('content-type') || 'unknown',
@@ -126,10 +126,10 @@ export function createRequestLogger(req: Request) {
 
   const logError = (error: Error | unknown, statusCode: number = 500) => {
     const duration = Date.now() - startTime;
-    logger.error('Request failed', {
+    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    logger.error('Request failed', normalizedError, {
       statusCode,
       duration,
-      error: error instanceof Error ? error : new Error(String(error)),
     });
   };
 
