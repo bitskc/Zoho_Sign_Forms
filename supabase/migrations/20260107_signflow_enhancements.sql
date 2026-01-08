@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS form_analytics (
   visitor_name TEXT, -- Captured on submit attempts
   referrer TEXT,
   user_agent TEXT,
-  metadata JSONB, -- Flexible field for additional data
+  metadata JSONB, -- Flexible field for additional non-sensitive data (no IP address storage, GDPR compliant)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

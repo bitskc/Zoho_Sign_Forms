@@ -202,7 +202,7 @@ export default async function handler(req: Request) {
         console.log('=== EMBED TOKEN REQUEST ===');
         console.log('Making embedtoken API call...');
         // Use PUBLIC_URL environment variable for security (prevents header-based attacks)
-        const host = process.env.PUBLIC_URL || 'https://zoho-sign-forms.vercel.app';
+        const host = process.env.PUBLIC_URL || 'https://www.signflow.ink';
         const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
         console.log('Embed URL:', embedUrl);
         console.log('Host parameter:', host);

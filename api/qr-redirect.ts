@@ -31,7 +31,7 @@ export default async function handler(req: Request) {
 
   // Build the redirect URL to the form slug
   // Use environment variable or hardcoded production URL for security
-  const baseUrl = process.env.PUBLIC_URL || 'https://zoho-sign-forms.vercel.app';
+  const baseUrl = process.env.PUBLIC_URL || 'https://www.signflow.ink';
   const redirectUrl = `${baseUrl}/${formData.slug}`;
 
   // Return redirect response
