@@ -651,9 +651,15 @@ const App: React.FC = () => {
       } else if (res.status === 404) {
         // QR code doesn't exist, generate it
         await generateQRCode(formId);
+      } else {
+        // Handle other errors by attempting to generate
+        console.warn('QR fetch returned non-404 error, attempting to generate:', res.status);
+        await generateQRCode(formId);
       }
     } catch (e) {
       console.error('Failed to fetch QR code:', e);
+      // If fetch fails, try to generate
+      await generateQRCode(formId);
     } finally {
       setLoadingQR(prev => {
         const next = new Set(prev);
@@ -681,9 +687,14 @@ const App: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('QR generation failed:', errorData);
+        setError(`Failed to generate QR code: ${errorData.error || 'Unknown error'}`);
       }
     } catch (e) {
       console.error('Failed to generate QR code:', e);
+      setError('Failed to generate QR code. Please try again.');
     } finally {
       setLoadingQR(prev => {
         const next = new Set(prev);
