@@ -42,6 +42,7 @@ export default async function handler(req: Request) {
     const result = checkRateLimit(rateKey, RATE_LIMITS.CREDENTIALS);
     if (!result.allowed) {
       logger.warn('Rate limit exceeded for credentials', { retryAfter: result.retryAfter });
+      logResponse(429);
       return createRateLimitResponse(result);
     }
 
