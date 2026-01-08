@@ -22,9 +22,14 @@ const Header: React.FC<HeaderProps> = ({ isLoggedIn = false, onLoginClick }) => 
           <a href="#" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors hidden md:inline">Documentation</a>
           <a href="#" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors hidden md:inline">Support</a>
           {isLoggedIn ? (
-            <a href="#/admin/dashboard" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
-              Dashboard
-            </a>
+            <div className="flex items-center gap-3">
+              <a href="/" className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">
+                Home
+              </a>
+              <a href="#/admin/dashboard" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
+                Dashboard
+              </a>
+            </div>
           ) : (
             <div className="flex items-center gap-3">
               <a href="#/admin/login" onClick={onLoginClick} className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">

@@ -321,15 +321,6 @@ const App: React.FC = () => {
         setUserId(data.session.user.id);
         setAuth({ username: data.session.user.email || '', password: '' });
         
-        const hash = window.location.hash || '';
-        const path = window.location.pathname || '/';
-        
-        // Don't redirect if viewing a public form
-        if (path === '/' || path.startsWith('/api')) {
-          window.location.hash = '#/admin/dashboard';
-          setView(ViewMode.ADMIN_DASHBOARD);
-        }
-        
         await Promise.all([
           fetchForms(data.session.access_token),
           fetchCredentials(data.session.access_token),
@@ -660,9 +651,15 @@ const App: React.FC = () => {
       } else if (res.status === 404) {
         // QR code doesn't exist, generate it
         await generateQRCode(formId);
+      } else {
+        // Handle other errors by attempting to generate
+        console.warn('QR fetch returned non-404 error, attempting to generate:', res.status);
+        await generateQRCode(formId);
       }
     } catch (e) {
       console.error('Failed to fetch QR code:', e);
+      // If fetch fails, try to generate
+      await generateQRCode(formId);
     } finally {
       setLoadingQR(prev => {
         const next = new Set(prev);
@@ -690,9 +687,14 @@ const App: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('QR generation failed:', errorData);
+        setError(`Failed to generate QR code: ${errorData.error || 'Unknown error'}`);
       }
     } catch (e) {
       console.error('Failed to generate QR code:', e);
+      setError('Failed to generate QR code. Please try again.');
     } finally {
       setLoadingQR(prev => {
         const next = new Set(prev);
@@ -900,6 +902,9 @@ const App: React.FC = () => {
                </div>
             </div>
             <div className="flex items-center gap-3">
+              <button onClick={() => { window.location.hash = ''; setView(ViewMode.LANDING); }} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wide transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                Home
+              </button>
               <button onClick={() => setDarkMode(!darkMode)} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wide transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 {darkMode ? 'Light Mode' : 'Dark Mode'}
               </button>
@@ -1073,6 +1078,7 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => { window.location.hash = ''; setView(ViewMode.LANDING); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Home</button>
               <button onClick={() => { window.location.hash = '#/admin/dashboard'; setView(ViewMode.ADMIN_DASHBOARD); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Back to Dashboard</button>
               <button onClick={async () => {
                 await supabase.auth.signOut();
