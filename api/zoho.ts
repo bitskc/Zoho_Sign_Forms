@@ -1,4 +1,12 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { createRequestLogger, sanitizeLogContext } from './utils/logger.js';
+import { 
+  getRateLimitKey, 
+  checkRateLimit, 
+  createRateLimitResponse, 
+  RATE_LIMITS,
+  cleanupRateLimitStore 
+} from './utils/rateLimiter.js';
 
 export const config = {
   runtime: 'edge',
@@ -34,18 +42,50 @@ async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
 }
 
 export default async function handler(req: Request) {
+  const { requestId, logger, logResponse, logError } = createRequestLogger(req);
+  
+  // Periodic cleanup
+  if (Math.random() < 0.01) {
+    cleanupRateLimitStore();
+  }
+
   if (req.method !== 'POST') {
+    logResponse(405);
     return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
   }
 
   try {
     const body = await req.json();
-    const { action, apiDomain, clientId, clientSecret, refreshToken, grantToken, redirectUri } = body;
+    const { action, apiDomain, clientId, clientSecret, refreshToken, grantToken, redirectUri, userId } = body;
+    
+    logger.debug('Request body received', sanitizeLogContext({
+      action,
+      apiDomain,
+      clientId: clientId ? '[PROVIDED]' : '[ENV]',
+      clientSecret: clientSecret ? '[PROVIDED]' : '[ENV]',
+      userId: userId ? '[PROVIDED]' : undefined,
+      templateId: body.templateId?.slice(0, 8),
+    }));
+
+    // Apply rate limiting
+    const rateLimitKey = getRateLimitKey(req, userId);
+    const rateLimitCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.ZOHO_API);
+    
+    if (!rateLimitCheck.allowed) {
+      logger.warn('Rate limit exceeded', {
+        limitKey: rateLimitKey,
+        retryAfter: rateLimitCheck.retryAfter,
+      });
+      return createRateLimitResponse(rateLimitCheck);
+    }
+
     const resolvedClientId = clientId || process.env.ZOHO_CLIENT_ID;
     const resolvedClientSecret = clientSecret || process.env.ZOHO_CLIENT_SECRET;
 
     // --- CASE 1: Initial OAuth Exchange (Grant Token -> Refresh Token) ---
     if (action === 'exchange') {
+      logger.info('Processing OAuth token exchange');
+      
       const params = new URLSearchParams();
       params.append('code', grantToken);
       params.append('client_id', resolvedClientId || '');
@@ -56,14 +96,18 @@ export default async function handler(req: Request) {
       
       try {
         const data = await getOAuthToken(params, apiDomain || 'sign.zoho.com');
+        logger.info('OAuth token exchange successful');
+        logResponse(200, { action: 'exchange' });
         return new Response(JSON.stringify(data), { status: 200 });
       } catch (e: any) {
+        logger.error('OAuth token exchange failed', e);
+        logResponse(400, { action: 'exchange' });
         return new Response(JSON.stringify({ error: e.message }), { status: 400 });
       }
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken, clientId: providedClientId, clientSecret: providedClientSecret, userId } = body;
+    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken, clientId: providedClientId, clientSecret: providedClientSecret } = body;
 
     let effectiveClientId = providedClientId || resolvedClientId;
     let effectiveClientSecret = providedClientSecret || resolvedClientSecret;
