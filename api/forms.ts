@@ -22,6 +22,7 @@ function toCamel(record: any) {
     roleName: record.role_name,
     apiDomain: record.api_domain,
     accessToken: record.access_token,
+    qrStableId: record.qr_stable_id,
     createdAt: record.created_at ? Date.parse(record.created_at as any) : null
   };
 }
@@ -35,7 +36,7 @@ export default async function handler(req: Request) {
     if (slug) {
       const { data, error } = await supabaseServer
         .from(table)
-        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
+        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
         .eq('slug', slug)
         .maybeSingle();
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
@@ -50,7 +51,7 @@ export default async function handler(req: Request) {
 
     const { data, error } = await supabaseServer
       .from(table)
-      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,created_at')
+      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });

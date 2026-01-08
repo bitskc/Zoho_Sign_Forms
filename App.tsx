@@ -100,6 +100,12 @@ const App: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionPlan | null>(null);
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
   
+  // QR Code and Analytics states
+  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
+  const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
+  const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
+
+  
   // Debounce flags to prevent infinite retry loops
   const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
   const [subscriptionFetchAttempted, setSubscriptionFetchAttempted] = useState(false);
@@ -563,6 +569,9 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     
+    // Track submit_start event
+    trackAnalytics(currentForm.id, 'submit_start', { name: signer.name, email: signer.email });
+    
     console.log('=== SUBMISSION START ===');
     console.log('Current form:', currentForm);
     console.log('Signer data:', signer);
@@ -579,6 +588,9 @@ const App: React.FC = () => {
     console.log('=== END RESPONSE ===');
     
     if (res.success) {
+      // Track successful submission
+      trackAnalytics(currentForm.id, 'submit_success', { name: signer.name, email: signer.email });
+      
       if (res.signingUrl) {
         console.log('=== REDIRECTING TO ZOHO SIGN ===');
         console.log('Redirecting to:', res.signingUrl);
@@ -592,6 +604,9 @@ const App: React.FC = () => {
         setSuccessData({ requestId: res.requestId!, signingUrl: undefined });
       }
     } else {
+      // Track failed submission
+      trackAnalytics(currentForm.id, 'submit_error', { name: signer.name, email: signer.email, error: res.error });
+      
       console.log('=== SUBMISSION FAILED ===');
       console.log('Error:', res.error);
       setError(res.error || "Submission failed. Please try again.");
@@ -606,6 +621,105 @@ const App: React.FC = () => {
       window.open(url, '_blank');
     }
   };
+
+  // Analytics tracking function
+  const trackAnalytics = async (formId: string, eventType: 'visit' | 'submit_start' | 'submit_success' | 'submit_error', data?: { name?: string; email?: string; error?: string }) => {
+    try {
+      await fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formId,
+          eventType,
+          visitorEmail: data?.email,
+          visitorName: data?.name,
+          referrer: document.referrer || undefined,
+          userAgent: navigator.userAgent,
+          metadata: data?.error ? { error: data.error } : undefined
+        })
+      });
+    } catch (e) {
+      console.warn('Analytics tracking failed:', e);
+      // Don't block the user flow if analytics fails
+    }
+  };
+
+  // Fetch QR code for a form
+  const fetchQRCode = async (formId: string) => {
+    if (!sessionToken) return;
+    setLoadingQR(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch(`/api/qrcodes?formId=${formId}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      } else if (res.status === 404) {
+        // QR code doesn't exist, generate it
+        await generateQRCode(formId);
+      }
+    } catch (e) {
+      console.error('Failed to fetch QR code:', e);
+    } finally {
+      setLoadingQR(prev => {
+        const next = new Set(prev);
+        next.delete(formId);
+        return next;
+      });
+    }
+  };
+
+  // Generate QR code for a form
+  const generateQRCode = async (formId: string) => {
+    if (!sessionToken) return;
+    setLoadingQR(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch('/api/qrcodes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ formId, regenerate: false })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setQrCodes(prev => new Map(prev).set(formId, data.qrCodeData));
+      }
+    } catch (e) {
+      console.error('Failed to generate QR code:', e);
+    } finally {
+      setLoadingQR(prev => {
+        const next = new Set(prev);
+        next.delete(formId);
+        return next;
+      });
+    }
+  };
+
+  // Fetch analytics for a form
+  const fetchAnalytics = async (formId: string) => {
+    if (!sessionToken) return;
+    
+    try {
+      const res = await fetch(`/api/analytics?formId=${formId}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(prev => new Map(prev).set(formId, data));
+      }
+    } catch (e) {
+      console.error('Failed to fetch analytics:', e);
+    }
+  };
+
 
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
@@ -623,6 +737,14 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
+  // Track visit analytics when form is viewed
+  useEffect(() => {
+    if (view === ViewMode.PUBLIC_FORM && currentForm?.id) {
+      trackAnalytics(currentForm.id, 'visit');
+    }
+  }, [view, currentForm?.id]);
+
+
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {(!isRouteResolved || view === null) && (
@@ -636,17 +758,17 @@ const App: React.FC = () => {
 
       {isRouteResolved && view === ViewMode.LANDING && (
         <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
-          <Header />
+          <Header isLoggedIn={!!sessionToken} onLoginClick={() => setView(ViewMode.ADMIN_LOGIN)} />
           <main className="max-w-6xl mx-auto px-6 pt-16 pb-24">
             <section className="grid lg:grid-cols-2 gap-14 items-center">
               <div className="space-y-8">
-                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 border border-white/10 text-xs font-bold uppercase tracking-[0.25em]">
+                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-xs font-semibold uppercase tracking-wide">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   Live Zoho Sign Apps
                 </div>
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-300 font-semibold uppercase tracking-[0.35em]">SignFlow Pro</p>
-                  <h1 className="text-5xl lg:text-6xl font-black leading-tight">
+                  <p className="text-sm text-slate-300 font-medium uppercase tracking-wider">SignFlow Pro</p>
+                  <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
                     Launch branded signing portals in minutes—not months.
                   </h1>
                   <p className="text-lg text-slate-300 leading-relaxed">
@@ -656,24 +778,24 @@ const App: React.FC = () => {
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setView(ViewMode.ADMIN_LOGIN); }}
-                    className="px-6 py-4 rounded-2xl bg-white text-slate-900 font-black text-sm uppercase tracking-[0.25em] shadow-lg hover:translate-y-[-1px] transition"
+                    className="px-6 py-4 rounded-lg bg-white text-slate-900 font-bold text-sm uppercase tracking-wide shadow-lg hover:translate-y-[-1px] transition"
                   >
                     Start Free
                   </button>
                   <button
                     onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setView(ViewMode.ADMIN_LOGIN); }}
-                    className="px-6 py-4 rounded-2xl border border-white/30 text-white font-black text-sm uppercase tracking-[0.25em] hover:bg-white/10 transition"
+                    className="px-6 py-4 rounded-lg border border-white/30 text-white font-bold text-sm uppercase tracking-wide hover:bg-white/10 transition"
                   >
                     Admin Login
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm text-slate-300">
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <p className="font-black text-white mb-1">Embed-ready URLs</p>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/5">
+                    <p className="font-bold text-white mb-1">Embed-ready URLs</p>
                     <p className="leading-relaxed text-slate-400">Custom slugs per template. Drop links into any site or product.</p>
                   </div>
-                  <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <p className="font-black text-white mb-1">Account-level credentials</p>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/5">
+                    <p className="font-bold text-white mb-1">Account-level credentials</p>
                     <p className="leading-relaxed text-slate-400">Store Zoho OAuth credentials once, reuse across every form.</p>
                   </div>
                 </div>
@@ -730,34 +852,34 @@ const App: React.FC = () => {
 
       {view === ViewMode.ADMIN_LOGIN && (
         <div className="flex items-center justify-center min-h-screen p-6">
-          <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-900 border-slate-200'} p-10 rounded-[3rem] shadow-2xl border`}>
+          <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-900 border-slate-200'} p-10 rounded-lg shadow-2xl border`}>
             <div className="text-center mb-8 space-y-3">
-              <div className={`inline-flex items-center justify-center w-20 h-20 ${darkMode ? 'bg-slate-800 text-white' : 'bg-blue-600 text-white'} rounded-[2rem] font-black text-4xl shadow-lg shadow-blue-500/30`}>S</div>
-              <h1 className="text-3xl font-black tracking-tight">
+              <div className={`inline-flex items-center justify-center w-20 h-20 ${darkMode ? 'bg-slate-800 text-white' : 'bg-blue-600 text-white'} rounded-lg font-bold text-4xl shadow-lg shadow-blue-500/30`}>S</div>
+              <h1 className="text-3xl font-bold tracking-tight">
                 {authMode === 'login' ? 'Admin Login' : 'Create Admin Account'}
               </h1>
-              <p className={`text-sm font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Mode: <span className={`${darkMode ? 'text-blue-300' : 'text-blue-600'} uppercase tracking-widest`}>{authMode}</span>
+              <p className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Mode: <span className={`${darkMode ? 'text-blue-300' : 'text-blue-600'} uppercase tracking-wide`}>{authMode}</span>
               </p>
             </div>
             <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <input type="email" autoComplete="username" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
-              <input type="password" autoComplete="current-password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-3xl text-center font-bold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
+              <input type="email" autoComplete="username" autoFocus className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-lg text-center font-semibold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={usernameInput} onChange={e => setUsernameInput(e.target.value)} placeholder="Email" />
+              <input type="password" autoComplete="current-password" className={`w-full px-6 py-4 ${darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'} border rounded-lg text-center font-semibold text-md outline-none focus:ring-4 focus:ring-blue-500/10`} value={passwordInput} onChange={e => setPasswordInput(e.target.value)} placeholder="Password" />
               {error && (
-                <div className={`text-sm font-semibold rounded-2xl px-4 py-3 text-center ${darkMode ? 'text-red-300 bg-red-950 border border-red-900' : 'text-red-600 bg-red-50 border border-red-200'}`}>
+                <div className={`text-sm font-medium rounded-lg px-4 py-3 text-center ${darkMode ? 'text-red-300 bg-red-950 border border-red-900' : 'text-red-600 bg-red-50 border border-red-200'}`}>
                   {error}
                 </div>
               )}
-              <button disabled={loading} className="w-full bg-slate-900 text-white py-4 rounded-3xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl disabled:opacity-60 disabled:cursor-not-allowed">
+              <button disabled={loading} className="w-full bg-slate-900 text-white py-4 rounded-lg font-bold text-lg hover:bg-slate-800 transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed">
                 {loading ? 'Please wait…' : authMode === 'login' ? 'Access Dashboard' : 'Create Account'}
               </button>
               <div className="text-center text-xs text-slate-400">
                 {authMode === 'login' ? (
-                  <button type="button" onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setError(null); }} className="underline font-bold">
+                  <button type="button" onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setError(null); }} className="underline font-semibold">
                     Need an account? Sign up
                   </button>
                 ) : (
-                  <button type="button" onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setError(null); }} className="underline font-bold">
+                  <button type="button" onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setError(null); }} className="underline font-semibold">
                     Already have an account? Log in
                   </button>
                 )}
@@ -771,17 +893,17 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto p-6 lg:p-12">
           <div className="flex items-center justify-between mb-12">
             <div className="flex items-center gap-5">
-               <div className="w-14 h-14 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-slate-700/30">S</div>
+               <div className="w-14 h-14 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-slate-700/30">S</div>
                <div>
-                  <h1 className={`text-4xl font-black tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>SignFlow Dashboard</h1>
-                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-xs font-semibold uppercase tracking-[0.2em]`}>Admin · Integrations</p>
+                  <h1 className={`text-4xl font-bold tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>SignFlow Dashboard</h1>
+                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-xs font-medium uppercase tracking-wider`}>Admin · Integrations</p>
                </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setDarkMode(!darkMode)} className={`px-4 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+              <button onClick={() => setDarkMode(!darkMode)} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wide transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 {darkMode ? 'Light Mode' : 'Dark Mode'}
               </button>
-              <button onClick={() => { window.location.hash = '#/admin/settings'; setView(ViewMode.ADMIN_SETTINGS); }} className={`px-4 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Settings</button>
+              <button onClick={() => { window.location.hash = '#/admin/settings'; setView(ViewMode.ADMIN_SETTINGS); }} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wide transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Settings</button>
               <button onClick={async () => {
                 await supabase.auth.signOut();
                 setSessionToken(null);
@@ -794,17 +916,17 @@ const App: React.FC = () => {
                 setSubscriptionFetchAttempted(false);
                 setView(ViewMode.ADMIN_LOGIN);
                 window.location.hash = '';
-              }} className={`px-6 py-2.5 rounded-lg border text-xs font-black transition-all uppercase tracking-widest ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
+              }} className={`px-6 py-2.5 rounded-lg border text-xs font-semibold transition-all uppercase tracking-wide ${darkMode ? 'border-slate-700 text-slate-300 hover:text-red-400' : 'border-slate-200 text-slate-500 hover:text-red-500'}`}>Logout</button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Form Editor */}
             <div className="lg:col-span-5">
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} p-8 rounded-2xl shadow-lg sticky top-8`}>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} p-8 rounded-lg shadow-lg sticky top-8`}>
                 <div className="flex items-center justify-between mb-8">
-                  <h3 className={`font-black text-2xl ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{editingId ? "Edit" : "New"} Integration</h3>
-                  {editingId && <button onClick={clearForm} className={`text-[10px] px-3 py-1.5 rounded-md font-black border ${darkMode ? 'bg-slate-800 text-slate-200 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>Cancel</button>}
+                  <h3 className={`font-bold text-2xl ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{editingId ? "Edit" : "New"} Integration</h3>
+                  {editingId && <button onClick={clearForm} className={`text-[10px] px-3 py-1.5 rounded-md font-bold border ${darkMode ? 'bg-slate-800 text-slate-200 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>Cancel</button>}
                 </div>
 
                 <form onSubmit={saveForm} className={`space-y-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
@@ -879,7 +1001,7 @@ const App: React.FC = () => {
                              <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-50 text-blue-600'}`}>{form.apiDomain.split('.').pop()}</span>
                              <span className="text-[10px] bg-slate-900 text-slate-200 px-2 py-1 rounded font-mono">Live</span>
                           </div>
-                          <div className="flex items-center gap-2 group">
+                          <div className="flex items-center gap-2 group mb-3">
                              <code className={`text-[10px] font-bold px-2 py-1 rounded ${darkMode ? 'text-blue-200 bg-blue-900/40' : 'text-blue-600 bg-blue-50/50'}`}>/{form.slug}</code>
                              <button onClick={() => {
                                 const url = `${window.location.origin}/${form.slug}`;
@@ -887,6 +1009,35 @@ const App: React.FC = () => {
                                 alert("Link copied to clipboard!");
                              }} className={`${darkMode ? 'text-slate-400 hover:text-blue-300' : 'text-slate-300 hover:text-blue-500'} p-1`}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg></button>
                           </div>
+                          {/* QR Code Section */}
+                          <div className="flex items-center gap-2">
+                            {qrCodes.has(form.id) ? (
+                              <>
+                                <img src={qrCodes.get(form.id)} alt="QR Code" className="w-12 h-12 rounded border border-slate-700" />
+                                <button onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = qrCodes.get(form.id)!;
+                                  link.download = `${form.slug}-qr.png`;
+                                  link.click();
+                                }} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}>Download QR</button>
+                              </>
+                            ) : (
+                              <button onClick={() => fetchQRCode(form.id)} disabled={loadingQR.has(form.id)} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} disabled:opacity-50`}>
+                                {loadingQR.has(form.id) ? 'Generating...' : 'Generate QR Code'}
+                              </button>
+                            )}
+                          </div>
+                          {/* Analytics Preview */}
+                          {analytics.has(form.id) && (
+                            <div className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`} aria-label="Analytics summary">
+                              Analytics: {analytics.get(form.id).summary.totalVisits} visits · {analytics.get(form.id).summary.successfulSubmissions} submissions
+                            </div>
+                          )}
+                          {!analytics.has(form.id) && sessionToken && (
+                            <button onClick={() => fetchAnalytics(form.id)} className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'}`}>
+                              View Analytics
+                            </button>
+                          )}
                         </td>
                         <td className="px-6 py-6">
                           <div className="flex items-center justify-end gap-2">
@@ -1002,12 +1153,12 @@ const App: React.FC = () => {
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className="w-full max-w-md">
             {!currentForm ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-2xl shadow-xl text-center border`}>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl text-center border`}>
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3"></div>
                 <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} font-medium text-sm`}>Loading form...</p>
               </div>
             ) : !successData ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-2xl shadow-xl animate-in fade-in duration-700 border`}>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl animate-in fade-in duration-700 border`}>
                 <div className="text-center mb-8">
                   <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                     <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -1039,7 +1190,7 @@ const App: React.FC = () => {
                 </form>
               </div>
             ) : (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-10 rounded-2xl shadow-xl text-center animate-in zoom-in duration-500 border`}>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border`}>
                 <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${darkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-50 text-green-600'}`}>
                   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>

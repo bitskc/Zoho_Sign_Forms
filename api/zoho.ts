@@ -192,37 +192,74 @@ export default async function handler(req: Request) {
     }
 
     // For embedded signing, make the embedtoken API call to get the proper signing URL
+    // This is now MANDATORY for successful sign requests
     if (response.ok && data.requests) {
       const request = data.requests;
       const actions = request?.actions || [];
       const action = actions[0];
       
       if (action?.action_id && request?.request_id) {
+        console.log('=== EMBED TOKEN REQUEST ===');
+        console.log('Making embedtoken API call...');
+        // Use PUBLIC_URL environment variable for security (prevents header-based attacks)
+        const host = process.env.PUBLIC_URL || 'https://www.signflow.ink';
+        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
+        console.log('Embed URL:', embedUrl);
+        console.log('Host parameter:', host);
+        console.log('Access token present:', !!accessToken);
+        
         try {
-          console.log('Making embedtoken API call...');
-          const host = req.headers.get('origin') || 'https://zoho-sign-forms.vercel.app';
-          const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken?host=${host}`;
-          console.log('Embed URL:', embedUrl);
-          
           const embedResponse = await fetch(embedUrl, {
-            method: 'GET',
-            headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
+            method: 'POST',
+            headers: { 
+              'Authorization': `Zoho-oauthtoken ${accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ host })
           });
           
-          if (embedResponse.ok) {
+          console.log('Embed response status:', embedResponse.status);
+          console.log('Embed response ok:', embedResponse.ok);
+          
+          if (!embedResponse.ok) {
+            const embedErrorText = await embedResponse.text();
+            console.error('=== EMBED TOKEN FAILED ===');
+            console.error('Status:', embedResponse.status);
+            console.error('Error text:', embedErrorText);
+            console.error('This means user will receive EMAIL LINK instead of embedded signing');
+            console.error('=== END EMBED TOKEN ERROR ===');
+            // Don't fail the entire request - just log the error and continue
+            // User will receive email link instead of embedded signing
+          } else {
             const embedData = await embedResponse.json();
-            console.log('Embed response:', embedData);
-            // Update the action with the embed signing URL
+            console.log('=== EMBED TOKEN SUCCESS ===');
+            console.log('Embed response data:', JSON.stringify(embedData));
+            
+            // Update the action with the embed signing URL if available
             if (embedData.sign_url) {
               action.signing_url = embedData.sign_url;
-              console.log('Updated signing URL from embed token:', embedData.sign_url);
+              console.log('✓ Updated signing URL from embed token:', embedData.sign_url);
+              console.log('=== END EMBED TOKEN SUCCESS ===');
+            } else {
+              console.warn('=== EMBED TOKEN MISSING SIGN_URL ===');
+              console.warn('Response data:', JSON.stringify(embedData));
+              console.warn('User will receive email link instead');
+              console.warn('=== END EMBED TOKEN WARNING ===');
             }
-          } else {
-            console.log('Embed token call failed:', embedResponse.status);
           }
         } catch (embedError) {
-          console.log('Error getting embed token:', embedError);
+          console.error('=== EMBED TOKEN EXCEPTION ===');
+          console.error('Error:', embedError);
+          console.error('Error message:', (embedError as Error).message);
+          console.error('Error stack:', (embedError as Error).stack);
+          console.error('User will receive email link instead');
+          console.error('=== END EMBED TOKEN EXCEPTION ===');
         }
+      } else {
+        console.warn('=== MISSING IDs FOR EMBED TOKEN ===');
+        console.warn('action_id:', action?.action_id);
+        console.warn('request_id:', request?.request_id);
+        console.warn('=== END MISSING IDs ===');
       }
     }
 
