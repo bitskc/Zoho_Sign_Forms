@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ViewMode, FormDefinition, SignerData, UserCredentials, SubscriptionPlan } from './types';
 import Header from './components/Header';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
@@ -110,6 +110,11 @@ const App: React.FC = () => {
   const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
   const [subscriptionFetchAttempted, setSubscriptionFetchAttempted] = useState(false);
   const [formsFetchAttempted, setFormsFetchAttempted] = useState(false);
+  
+  // Use refs for public form fetch tracking to avoid re-render loops
+  const fetchingFormBySlugRef = useRef(false);
+  const lastFetchedSlugRef = useRef<string | null>(null);
+  const analyticsTrackedRef = useRef<Set<string>>(new Set());
 
   const fetchForms = async (token: string) => {
     if (formsFetchAttempted) {
@@ -138,13 +143,34 @@ const App: React.FC = () => {
   };
 
   const fetchFormBySlug = async (slugVal: string) => {
+    // Use refs for guards to avoid stale closures and re-render loops
+    if (fetchingFormBySlugRef.current) {
+      return; // Prevent concurrent fetches
+    }
+    
+    if (lastFetchedSlugRef.current === slugVal) {
+      return; // Already fetched this slug
+    }
+    
+    fetchingFormBySlugRef.current = true;
+    
     try {
       const res = await fetch(`/api/forms?slug=${encodeURIComponent(slugVal)}`);
+      if (res.status === 429) {
+        // Rate limited - show a message instead of 404
+        setError('Too many requests. Please try again later.');
+        setCurrentForm(null);
+        setView(ViewMode.NOT_FOUND);
+        return;
+      }
       if (!res.ok) {
+        setCurrentForm(null);
         setView(ViewMode.NOT_FOUND);
         return;
       }
       const data = await res.json();
+      // Only mark as fetched after successful fetch
+      lastFetchedSlugRef.current = slugVal;
       setCurrentForm(data);
       setView(ViewMode.PUBLIC_FORM);
       // Update browser history for proper back/forward navigation
@@ -152,7 +178,10 @@ const App: React.FC = () => {
         window.history.pushState({ slug: slugVal }, '', `/${slugVal}`);
       }
     } catch {
+      setCurrentForm(null);
       setView(ViewMode.NOT_FOUND);
+    } finally {
+      fetchingFormBySlugRef.current = false;
     }
   };
 
@@ -273,24 +302,20 @@ const App: React.FC = () => {
         
         // Validate slug format
         if (!isValidSlug(slugVal)) {
+          setCurrentForm(null);
           setView(ViewMode.NOT_FOUND);
           return;
         }
         
-        // Check if form exists in loaded forms first (avoid race condition)
-        const found = forms.find(f => f.slug === slugVal);
-        if (found) {
-          setCurrentForm(found);
-          setView(ViewMode.PUBLIC_FORM);
-        } else if (slugVal && isRouteResolved) {
-          // Only fetch if initial route resolution is complete
+        // For public forms, fetch by slug using ref-based guards
+        // The guards are in fetchFormBySlug itself, so just call it
+        if (slugVal && isRouteResolved) {
           fetchFormBySlug(slugVal);
         } else if (!isRouteResolved) {
-          // Wait for initial load to complete, will re-check when forms populate
+          // Wait for initial load to complete
           setView(ViewMode.PUBLIC_FORM);
-        } else {
-          setView(ViewMode.NOT_FOUND);
         }
+        return;
       } else if (hash.startsWith('#/admin/signup')) {
         setAuthMode('signup');
         setView(ViewMode.ADMIN_LOGIN);
@@ -376,7 +401,8 @@ const App: React.FC = () => {
       window.removeEventListener('popstate', resolveRoute);
       listener?.subscription.unsubscribe();
     };
-  }, [forms, isRouteResolved]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRouteResolved]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -613,7 +639,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Analytics tracking function
+  // Analytics tracking function - simplified, relies on caller to prevent duplicates
   const trackAnalytics = async (formId: string, eventType: 'visit' | 'submit_start' | 'submit_success' | 'submit_error', data?: { name?: string; email?: string; error?: string }) => {
     try {
       await fetch('/api/analytics', {
@@ -739,10 +765,14 @@ const App: React.FC = () => {
     }
   }, [darkMode]);
 
-  // Track visit analytics when form is viewed
+  // Track visit analytics when form is viewed - using ref to prevent duplicate tracking
   useEffect(() => {
     if (view === ViewMode.PUBLIC_FORM && currentForm?.id) {
-      trackAnalytics(currentForm.id, 'visit');
+      // Check if we've already tracked this form visit
+      if (!analyticsTrackedRef.current.has(currentForm.id)) {
+        analyticsTrackedRef.current.add(currentForm.id);
+        trackAnalytics(currentForm.id, 'visit');
+      }
     }
   }, [view, currentForm?.id]);
 

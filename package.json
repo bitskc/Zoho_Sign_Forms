@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vercel": "vercel dev --listen 3001",
+    "dev:full": "npm run dev:vercel & sleep 3 && npm run dev",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest"

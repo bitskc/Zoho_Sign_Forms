@@ -165,6 +165,11 @@ export const RATE_LIMITS = {
     windowMs: 5 * 60 * 1000, // 5 minutes
     maxRequests: 20, // 20 requests per 5 minutes
   },
+  // Analytics endpoint - more permissive since it's non-critical
+  ANALYTICS: {
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 10, // 10 requests per minute
+  },
 };
 
 /**

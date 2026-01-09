@@ -1,4 +1,5 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { checkRateLimit, createRateLimitResponse, getRateLimitKey, getUserIdFromRequest, RATE_LIMITS } from './utils/rateLimiter.js';
 
 export const config = { runtime: 'edge' };
 
@@ -34,6 +35,15 @@ export default async function handler(req: Request) {
     const url = new URL(req.url);
     const slug = url.searchParams.get('slug');
     if (slug) {
+      // Rate limit public form access
+      const userId = await getUserIdFromRequest(req);
+      const key = getRateLimitKey(req, userId);
+      const rateLimitResult = checkRateLimit(key, RATE_LIMITS.FORMS);
+      
+      if (!rateLimitResult.allowed) {
+        return createRateLimitResponse(rateLimitResult);
+      }
+      
       const { data, error } = await supabaseServer
         .from(table)
         .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')

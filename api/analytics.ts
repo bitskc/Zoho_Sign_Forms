@@ -1,4 +1,5 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { checkRateLimit, createRateLimitResponse, getRateLimitKey, getUserIdFromRequest, RATE_LIMITS } from './utils/rateLimiter.js';
 
 export const config = { runtime: 'edge' };
 
@@ -16,6 +17,15 @@ export default async function handler(req: Request) {
 
   // POST - Record analytics event (no auth required for public events)
   if (req.method === 'POST') {
+    // Rate limit analytics requests
+    const userId = await getUserIdFromRequest(req);
+    const key = getRateLimitKey(req, userId);
+    const rateLimitResult = checkRateLimit(key, RATE_LIMITS.ANALYTICS);
+    
+    if (!rateLimitResult.allowed) {
+      return createRateLimitResponse(rateLimitResult);
+    }
+    
     const body = await req.json();
     const { formId, eventType, visitorEmail, visitorName, referrer, userAgent, metadata } = body;
 
