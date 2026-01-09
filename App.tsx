@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ViewMode, FormDefinition, SignerData, UserCredentials, SubscriptionPlan } from './types';
 import Header from './components/Header';
+import QRCodeModal from './components/QRCodeModal';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 import { getRouteContext, buildFormUrl } from './services/routingService';
@@ -100,7 +101,11 @@ const App: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionPlan | null>(null);
   const [subscriptionLoaded, setSubscriptionLoaded] = useState(false);
   
-  // QR Code and Analytics states
+  // QR Code Modal state
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrModalForm, setQrModalForm] = useState<FormDefinition | null>(null);
+  
+  // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
   const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
@@ -1046,22 +1051,18 @@ const App: React.FC = () => {
                           </div>
                           {/* QR Code Section */}
                           <div className="flex items-center gap-2">
-                            {qrCodes.has(form.id) ? (
-                              <>
-                                <img src={qrCodes.get(form.id)} alt="QR Code" className="w-12 h-12 rounded border border-slate-700" crossOrigin="anonymous" />
-                                <a 
-                                  href={qrCodes.get(form.id)} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  download={`${form.slug}-qr.png`}
-                                  className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}
-                                >Download QR</a>
-                              </>
-                            ) : (
-                              <button onClick={() => fetchQRCode(form.id)} disabled={loadingQR.has(form.id)} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} disabled:opacity-50`}>
-                                {loadingQR.has(form.id) ? 'Generating...' : 'Generate QR Code'}
-                              </button>
-                            )}
+                            <button 
+                              onClick={() => {
+                                setQrModalForm(form);
+                                setQrModalOpen(true);
+                              }} 
+                              className={`text-[10px] px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                              </svg>
+                              QR Code
+                            </button>
                           </div>
                           {/* Analytics Preview */}
                           {analytics.has(form.id) && (
@@ -1255,6 +1256,20 @@ const App: React.FC = () => {
             <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl">Return to Safety</a>
           </div>
         </div>
+      )}
+
+      {/* QR Code Modal */}
+      {qrModalForm && (
+        <QRCodeModal
+          isOpen={qrModalOpen}
+          onClose={() => {
+            setQrModalOpen(false);
+            setQrModalForm(null);
+          }}
+          url={buildFormUrl(qrModalForm.slug)}
+          formName={qrModalForm.name}
+          darkMode={darkMode}
+        />
       )}
     </div>
   );
