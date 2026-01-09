@@ -46,7 +46,7 @@ const App: React.FC = () => {
     const hostname = window.location.hostname;
     
     // Check for path-based form URLs (e.g., /formslug)
-    if (path !== '/' && !path.startsWith('/api')) {
+    if (path !== '/' && !path.startsWith('/api') && !path.startsWith('/qr/')) {
       return ViewMode.PUBLIC_FORM;
     }
     
@@ -63,9 +63,17 @@ const App: React.FC = () => {
     
     return ViewMode.LANDING;
   };
+
+  // Determine if this is a public form page (for faster loading)
+  const isPublicFormPage = () => {
+    const path = window.location.pathname || '/';
+    return path !== '/' && !path.startsWith('/api') && !path.startsWith('/qr/');
+  };
   
   const [view, setView] = useState<ViewMode | null>(getInitialView());
-  const [isRouteResolved, setIsRouteResolved] = useState(false);
+  // For public forms, we don't need to wait for auth - resolve immediately
+  const [isRouteResolved, setIsRouteResolved] = useState(isPublicFormPage());
+  const [isFormLoading, setIsFormLoading] = useState(isPublicFormPage());
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -154,10 +162,12 @@ const App: React.FC = () => {
     }
     
     if (lastFetchedSlugRef.current === slugVal) {
+      setIsFormLoading(false);
       return; // Already fetched this slug
     }
     
     fetchingFormBySlugRef.current = true;
+    setIsFormLoading(true);
     
     try {
       const res = await fetch(`/api/forms?slug=${encodeURIComponent(slugVal)}`);
@@ -187,6 +197,7 @@ const App: React.FC = () => {
       setView(ViewMode.NOT_FOUND);
     } finally {
       fetchingFormBySlugRef.current = false;
+      setIsFormLoading(false);
     }
   };
 
@@ -345,6 +356,33 @@ const App: React.FC = () => {
     window.addEventListener('popstate', resolveRoute);
     
     const init = async () => {
+      const path = window.location.pathname || '/';
+      const isPublicForm = path !== '/' && !path.startsWith('/api') && !path.startsWith('/qr/');
+      
+      // For public form pages, fetch the form immediately without waiting for auth
+      if (isPublicForm) {
+        const slugVal = path.substring(1).replace(/\/$/, '');
+        if (isValidSlug(slugVal)) {
+          // Start fetching the form right away
+          fetchFormBySlug(slugVal);
+        } else {
+          setCurrentForm(null);
+          setView(ViewMode.NOT_FOUND);
+          setIsFormLoading(false);
+        }
+        
+        // Auth check runs in background for public forms (non-blocking)
+        supabase.auth.getSession().then(({ data }) => {
+          if (data.session) {
+            setSessionToken(data.session.access_token);
+            setUserId(data.session.user.id);
+            setAuth({ username: data.session.user.email || '', password: '' });
+          }
+        });
+        return;
+      }
+      
+      // For admin/landing pages, wait for auth check
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setSessionToken(data.session.access_token);
@@ -784,11 +822,22 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      {(!isRouteResolved || view === null) && (
+      {/* Loading state for admin/landing pages (waiting for auth) */}
+      {(!isRouteResolved || view === null) && view !== ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading state for public form pages (fast, minimal) */}
+      {view === ViewMode.PUBLIC_FORM && isFormLoading && !currentForm && (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            <p className={`${darkMode ? 'text-slate-500' : 'text-slate-400'} text-sm`}>Loading form...</p>
           </div>
         </div>
       )}
