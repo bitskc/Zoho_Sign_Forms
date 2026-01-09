@@ -1048,13 +1048,14 @@ const App: React.FC = () => {
                           <div className="flex items-center gap-2">
                             {qrCodes.has(form.id) ? (
                               <>
-                                <img src={qrCodes.get(form.id)} alt="QR Code" className="w-12 h-12 rounded border border-slate-700" />
-                                <button onClick={() => {
-                                  const link = document.createElement('a');
-                                  link.href = qrCodes.get(form.id)!;
-                                  link.download = `${form.slug}-qr.png`;
-                                  link.click();
-                                }} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}>Download QR</button>
+                                <img src={qrCodes.get(form.id)} alt="QR Code" className="w-12 h-12 rounded border border-slate-700" crossOrigin="anonymous" />
+                                <a 
+                                  href={qrCodes.get(form.id)} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  download={`${form.slug}-qr.png`}
+                                  className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'text-slate-300 hover:text-slate-100' : 'text-slate-600 hover:text-slate-900'}`}
+                                >Download QR</a>
                               </>
                             ) : (
                               <button onClick={() => fetchQRCode(form.id)} disabled={loadingQR.has(form.id)} className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'} disabled:opacity-50`}>
