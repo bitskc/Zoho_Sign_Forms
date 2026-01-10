@@ -5,11 +5,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SignFlow Pro - Zoho Sign Integration</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Preconnect to external domains for faster loading -->
+    <link rel="preconnect" href="https://khyamuueugctbfhekjbw.supabase.co" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Load font with display swap to prevent blocking -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
+      }
+      /* Minimal loading state before React hydrates */
+      .loading-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: #0f172a;
+      }
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #1e293b;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
     </style>
     <script type="importmap">
@@ -24,7 +48,12 @@
     </script>
     <script type="module" src="./index.tsx"></script>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+  <body class="bg-slate-950 text-slate-100">
+    <div id="root">
+      <!-- Instant loading state before React hydrates -->
+      <div class="loading-placeholder">
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
   </body>
 </html>

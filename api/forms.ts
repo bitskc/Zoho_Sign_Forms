@@ -1,5 +1,5 @@
 import { supabaseServer } from './_supabaseServer.js';
-import { checkRateLimit, createRateLimitResponse, getRateLimitKey, getUserIdFromRequest, RATE_LIMITS } from './utils/rateLimiter.js';
+import { checkRateLimit, createRateLimitResponse, getRateLimitKey, RATE_LIMITS } from './utils/rateLimiter.js';
 
 export const config = { runtime: 'edge' };
 
@@ -35,9 +35,8 @@ export default async function handler(req: Request) {
     const url = new URL(req.url);
     const slug = url.searchParams.get('slug');
     if (slug) {
-      // Rate limit public form access
-      const userId = await getUserIdFromRequest(req);
-      const key = getRateLimitKey(req, userId);
+      // For public form access, use IP-based rate limiting only (faster)
+      const key = getRateLimitKey(req);
       const rateLimitResult = checkRateLimit(key, RATE_LIMITS.FORMS);
       
       if (!rateLimitResult.allowed) {
@@ -51,7 +50,15 @@ export default async function handler(req: Request) {
         .maybeSingle();
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
       if (!data) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
-      return new Response(JSON.stringify(toCamel(data)), { status: 200 });
+      
+      // Cache public form data for 60 seconds to reduce DB queries
+      return new Response(JSON.stringify(toCamel(data)), { 
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+        }
+      });
     }
 
     const user = await getUserFromAuthHeader(req);
