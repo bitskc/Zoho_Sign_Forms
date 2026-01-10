@@ -166,6 +166,7 @@ const App: React.FC = () => {
   const fetchingFormBySlugRef = useRef(false);
   const lastFetchedSlugRef = useRef<string | null>(null);
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
+  const qrBatchProcessingRef = useRef(false);
 
   const fetchForms = async (token: string) => {
     if (formsFetchAttempted) {
@@ -189,56 +190,75 @@ const App: React.FC = () => {
       setForms(data || []);
       
       // Load existing QR codes and generate missing ones (with batching for performance)
-      const newQrCodes = new Map(qrCodes);
-      const formsNeedingQR = [];
-      
-      for (const form of (data || [])) {
-        // If form has existing QR code data from database, use it
-        if (form.qrCodeData && !newQrCodes.has(form.id)) {
-          newQrCodes.set(form.id, form.qrCodeData);
-        }
-        // Collect forms that need QR generation
-        else if (!form.qrCodeData && !newQrCodes.has(form.id)) {
-          formsNeedingQR.push(form);
-        }
+      // Prevent concurrent batch processing
+      if (qrBatchProcessingRef.current) {
+        console.log('QR batch processing already in progress, skipping');
+        return;
       }
       
-      // Generate QR codes in small batches of 2 to be very API-friendly
-      const batchSize = 2;
-      for (let i = 0; i < formsNeedingQR.length; i += batchSize) {
-        const batch = formsNeedingQR.slice(i, i + batchSize);
+      qrBatchProcessingRef.current = true;
+      
+      try {
+        const newQrCodes = new Map();
+        const formsNeedingQR = [];
         
-        await Promise.all(batch.map(async (form) => {
-          try {
-            const qrResponse = await fetch('/api/qrcodes', {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({
-                formId: form.id,
-                templateId: form.templateId,
-                slug: form.slug || `form-${form.id}`
-              })
-            });
-            
-            if (qrResponse.ok) {
-              const qrResult = await qrResponse.json();
-              newQrCodes.set(form.id, qrResult.qrCodeData);
-            }
-          } catch (error) {
-            console.log(`Failed to generate QR for form ${form.id}:`, error);
+        for (const form of (data || [])) {
+          // If form has existing QR code data from database, use it
+          if (form.qrCodeData) {
+            newQrCodes.set(form.id, form.qrCodeData);
           }
-        }));
-        
-        // Longer delay between batches to be very API-friendly
-        if (i + batchSize < formsNeedingQR.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Collect forms that need QR generation
+          else {
+            formsNeedingQR.push(form);
+          }
         }
+        
+        // Generate QR codes in small batches of 2 to be very API-friendly
+        const batchSize = 2;
+        for (let i = 0; i < formsNeedingQR.length; i += batchSize) {
+          const batch = formsNeedingQR.slice(i, i + batchSize);
+          
+          await Promise.all(batch.map(async (form) => {
+            try {
+              const qrResponse = await fetch('/api/qrcodes', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  formId: form.id,
+                  templateId: form.templateId,
+                  slug: form.slug || `form-${form.id}`
+                })
+              });
+              
+              if (qrResponse.ok) {
+                const qrResult = await qrResponse.json();
+                newQrCodes.set(form.id, qrResult.qrCodeData);
+              }
+            } catch (error) {
+              console.log(`Failed to generate QR for form ${form.id}:`, error);
+            }
+          }));
+          
+          // Longer delay between batches to be very API-friendly
+          if (i + batchSize < formsNeedingQR.length) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+        
+        // Use functional update to merge with current state safely
+        setQrCodes(prev => {
+          const merged = new Map(prev);
+          for (const [key, value] of newQrCodes.entries()) {
+            merged.set(key, value);
+          }
+          return merged;
+        });
+      } finally {
+        qrBatchProcessingRef.current = false;
       }
-      
-      setQrCodes(newQrCodes);
     } catch (e) {
       console.error('fetch forms error', e);
       setForms([]);
