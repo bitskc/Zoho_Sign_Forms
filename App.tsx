@@ -70,7 +70,9 @@ const App: React.FC = () => {
     }
     
     // Check for hash-based admin routes
-    if (hash.startsWith('#/admin')) {
+    if (hash.startsWith('#/admin/form/')) {
+      return ViewMode.FORM_DETAILS;
+    } else if (hash.startsWith('#/admin')) {
       return ViewMode.ADMIN_LOGIN;
     }
     
@@ -379,6 +381,43 @@ const App: React.FC = () => {
         setView(ViewMode.ADMIN_DASHBOARD);
       } else if (hash.startsWith('#/admin/settings')) {
         setView(ViewMode.ADMIN_SETTINGS);
+      } else if (hash.startsWith('#/admin/form/')) {
+        // Extract form ID from hash (e.g., #/admin/form/123 -> 123)
+        const formId = hash.split('/').pop();
+        const form = forms.find(f => f.id === formId);
+        if (form && sessionToken) {
+          // Load form details without calling openFormDetails to avoid recursion
+          setSelectedFormId(formId);
+          setDetailsTab('settings');
+          
+          // Load basic form settings into editor
+          setEditingId(form.id);
+          setFormName(form.name);
+          setTemplateId(form.templateId);
+          setRoleName(form.roleName);
+          setApiDomain(form.apiDomain || 'https://sign.zoho.com');
+          setSlug(form.slug);
+          
+          // Load landing page config
+          const lc = form.landingConfig || {};
+          setLandingHeadline(lc.headline || '');
+          setLandingDescription(lc.description || '');
+          setLandingLogoUrl(lc.logoUrl || '');
+          setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+          setLandingButtonText(lc.buttonText || 'Sign Now');
+          setLandingCompanyName(lc.contact?.companyName || '');
+          setLandingContactEmail(lc.contact?.email || '');
+          setLandingContactPhone(lc.contact?.phone || '');
+          setLandingFooterText(lc.footerText || '');
+          setLandingShowPoweredBy(lc.showPoweredBy !== false);
+          
+          setError(null);
+          setView(ViewMode.FORM_DETAILS);
+        } else {
+          // Form not found or not authenticated, go to dashboard
+          setView(ViewMode.ADMIN_DASHBOARD);
+          window.location.hash = '#/admin/dashboard';
+        }
       } else {
         if (hash !== '') {
           window.location.hash = '';
