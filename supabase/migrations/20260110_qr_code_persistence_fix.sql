@@ -50,8 +50,9 @@ CREATE TRIGGER update_form_qrcodes_updated_at
 -- 7. Add RLS (Row Level Security) policies for form_qrcodes
 ALTER TABLE form_qrcodes ENABLE ROW LEVEL SECURITY;
 
--- Allow users to manage their own form QR codes
-CREATE POLICY IF NOT EXISTS "Users can manage their own form QR codes" ON form_qrcodes
+-- Drop existing policies if they exist, then create new ones
+DROP POLICY IF EXISTS "Users can manage their own form QR codes" ON form_qrcodes;
+CREATE POLICY "Users can manage their own form QR codes" ON form_qrcodes
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM forms 
@@ -60,6 +61,7 @@ CREATE POLICY IF NOT EXISTS "Users can manage their own form QR codes" ON form_q
     )
   );
 
--- Allow public read access for QR redirects (needed for /qr/{stable_id} redirects)
-CREATE POLICY IF NOT EXISTS "Public read access for QR codes" ON form_qrcodes
+-- Drop existing policy if it exists, then create new one
+DROP POLICY IF EXISTS "Public read access for QR codes" ON form_qrcodes;
+CREATE POLICY "Public read access for QR codes" ON form_qrcodes
   FOR SELECT USING (true);
