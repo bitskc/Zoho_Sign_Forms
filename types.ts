@@ -1,3 +1,36 @@
+// Landing page theme configuration
+export interface LandingTheme {
+  primaryColor: string;      // Main brand color (buttons, links)
+  backgroundColor: string;   // Page background
+  cardColor: string;         // Form card background
+  textColor: string;         // Primary text color
+  mutedColor: string;        // Secondary/muted text
+  accentColor: string;       // Success/accent color
+  darkMode: boolean;         // Dark mode toggle
+}
+
+// Contact information for landing page
+export interface LandingContact {
+  companyName?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+}
+
+// Full landing page configuration
+export interface LandingConfig {
+  headline?: string;         // Main headline (defaults to form name)
+  description?: string;      // Description text below headline
+  logoUrl?: string;          // Company logo URL
+  logoAlt?: string;          // Logo alt text
+  theme?: Partial<LandingTheme>;
+  contact?: LandingContact;
+  footerText?: string;       // Custom footer text
+  showPoweredBy?: boolean;   // Show "Powered by SignFlow" badge
+  customCss?: string;        // Advanced: custom CSS overrides
+  buttonText?: string;       // Custom submit button text (default: "Sign Now")
+}
 
 export interface FormDefinition {
   id: string;
@@ -10,6 +43,7 @@ export interface FormDefinition {
   accessToken?: string; // deprecated; kept for backward compatibility
   createdAt?: number | null;
   qrStableId?: string; // Permanent QR code identifier
+  landingConfig?: LandingConfig; // Landing page customization
 }
 
 export interface UserCredentials {

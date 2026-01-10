@@ -1247,69 +1247,131 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {view === ViewMode.PUBLIC_FORM && (
-        <div className="flex items-center justify-center min-h-screen p-6">
-          <div className="w-full max-w-md">
-            {successData ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border`}>
-                <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${darkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-50 text-green-600'}`}>
-                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                </div>
-                <h2 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Document Ready</h2>
-                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Your agreement is prepared and waiting.</p>
-                {successData.signingUrl ? (
-                  <button onClick={() => openZohoSign(successData.signingUrl!)} className="w-full bg-slate-900 text-white py-3.5 rounded-lg font-bold text-base shadow-lg hover:bg-slate-800 transition-all active:scale-[0.98]">Open Signature Interface</button>
-                ) : (
-                  <div className={`${darkMode ? 'bg-blue-900/30 text-blue-200 border border-blue-800' : 'bg-blue-50 text-blue-700 border border-blue-200'} p-4 rounded-lg text-sm font-medium`}>
-                    A secure link has been sent to your email.
+      {view === ViewMode.PUBLIC_FORM && (() => {
+        // Get landing config with defaults
+        const lc = currentForm?.landingConfig || {};
+        const theme = lc.theme || {};
+        const contact = lc.contact || {};
+        
+        // Derive instant title from slug, use API name if available
+        const instantTitle = currentForm?.name || slugToTitle(window.location.pathname.substring(1).replace(/\/$/, ''));
+        const headline = lc.headline || instantTitle;
+        const description = lc.description;
+        const buttonText = lc.buttonText || 'Sign Now';
+        const showPoweredBy = lc.showPoweredBy !== false; // default true
+        
+        // Theme colors (use CSS variables for easy customization)
+        const primaryColor = theme.primaryColor || '#3B82F6';
+        const bgColor = theme.backgroundColor || (darkMode ? '#0F172A' : '#F8FAFC');
+        const cardColor = theme.cardColor || (darkMode ? '#1E293B' : '#FFFFFF');
+        const textColor = theme.textColor || (darkMode ? '#F1F5F9' : '#1E293B');
+        const mutedColor = theme.mutedColor || (darkMode ? '#94A3B8' : '#64748B');
+        
+        return (
+        <div className="min-h-screen p-6 flex flex-col" style={{ backgroundColor: bgColor }}>
+          {/* Logo/Header area */}
+          {lc.logoUrl && (
+            <div className="text-center pt-6 pb-2">
+              <img src={lc.logoUrl} alt={lc.logoAlt || 'Logo'} className="h-12 mx-auto object-contain" />
+            </div>
+          )}
+          
+          {/* Main content - centered */}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-full max-w-md">
+              {successData ? (
+                <div className="p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border" style={{ backgroundColor: cardColor, borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor }}>
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: darkMode ? 'rgba(16, 185, 129, 0.2)' : '#ECFDF5', color: '#10B981' }}>
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                   </div>
-                )}
-                <button onClick={() => setSuccessData(null)} className={`mt-6 font-semibold text-xs uppercase tracking-wider transition-colors ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>Go Back</button>
-              </div>
-            ) : (
-              /* Form shows IMMEDIATELY - no waiting for API */
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl border`}>
-                <div className="text-center mb-8">
-                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
-                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  </div>
-                  {/* Show form name instantly from slug, update if API returns different name */}
-                  <h1 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>
-                    {currentForm?.name || slugToTitle(window.location.pathname.substring(1).replace(/\/$/, ''))}
-                  </h1>
-                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm`}>Digital Signature Gateway</p>
-                </div>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!currentForm) {
-                    setError('Form is still loading. Please wait a moment and try again.');
-                    return;
-                  }
-                  const target = e.target as any;
-                  handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
-                }} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Full Name</label>
-                    <input required name="signerName" placeholder="John Doe" autoFocus className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Email Address</label>
-                    <input required name="signerEmail" type="email" placeholder="john@example.com" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                  </div>
-                  {error && (
-                    <div className={`p-3 text-xs font-medium rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
-                       {error}
+                  <h2 className="text-2xl font-bold mb-2">Document Ready</h2>
+                  <p className="text-sm mb-6" style={{ color: mutedColor }}>Your agreement is prepared and waiting.</p>
+                  {successData.signingUrl ? (
+                    <button onClick={() => openZohoSign(successData.signingUrl!)} className="w-full py-3.5 rounded-lg font-bold text-base shadow-lg hover:opacity-90 transition-all active:scale-[0.98]" style={{ backgroundColor: primaryColor, color: '#FFFFFF' }}>Open Signature Interface</button>
+                  ) : (
+                    <div className="p-4 rounded-lg text-sm font-medium" style={{ backgroundColor: darkMode ? 'rgba(59, 130, 246, 0.2)' : '#EFF6FF', color: primaryColor, border: `1px solid ${primaryColor}33` }}>
+                      A secure link has been sent to your email.
                     </div>
                   )}
-                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-bold text-base shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
-                    {loading ? "Preparing Document..." : "Sign Now"}
-                  </button>
-                </form>
-              </div>
+                  <button onClick={() => setSuccessData(null)} className="mt-6 font-semibold text-xs uppercase tracking-wider transition-colors hover:opacity-70" style={{ color: mutedColor }}>Go Back</button>
+                </div>
+              ) : (
+                /* Landing page with form - loads INSTANTLY */
+                <div className="rounded-lg shadow-xl border" style={{ backgroundColor: cardColor, borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
+                  <div className="p-8">
+                    <div className="text-center mb-6">
+                      {/* Icon */}
+                      <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
+                        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </div>
+                      
+                      {/* Headline */}
+                      <h1 className="text-2xl font-bold mb-2" style={{ color: textColor }}>{headline}</h1>
+                      
+                      {/* Description */}
+                      {description ? (
+                        <p className="text-sm leading-relaxed" style={{ color: mutedColor }}>{description}</p>
+                      ) : (
+                        <p className="text-sm" style={{ color: mutedColor }}>Digital Signature Gateway</p>
+                      )}
+                    </div>
+                    
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!currentForm) {
+                        setError('Form is still loading. Please wait a moment and try again.');
+                        return;
+                      }
+                      const target = e.target as any;
+                      handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
+                    }} className="space-y-5">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>Full Name</label>
+                        <input required name="signerName" placeholder="John Doe" autoFocus className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>Email Address</label>
+                        <input required name="signerEmail" type="email" placeholder="john@example.com" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                      </div>
+                      {error && (
+                        <div className="p-3 text-xs font-medium rounded-lg" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                           {error}
+                        </div>
+                      )}
+                      <button disabled={loading} className="w-full py-3.5 rounded-lg font-bold text-base shadow-lg transition-all active:scale-[0.98] disabled:opacity-50" style={{ backgroundColor: primaryColor, color: '#FFFFFF', boxShadow: `0 4px 14px ${primaryColor}30` }}>
+                        {loading ? "Preparing Document..." : buttonText}
+                      </button>
+                    </form>
+                  </div>
+                  
+                  {/* Contact info footer */}
+                  {(contact.companyName || contact.email || contact.phone) && (
+                    <div className="px-8 py-4 border-t text-center text-xs" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0', color: mutedColor }}>
+                      {contact.companyName && <span className="font-semibold">{contact.companyName}</span>}
+                      {contact.companyName && (contact.email || contact.phone) && <span className="mx-2">•</span>}
+                      {contact.email && <a href={`mailto:${contact.email}`} className="hover:underline">{contact.email}</a>}
+                      {contact.email && contact.phone && <span className="mx-2">•</span>}
+                      {contact.phone && <a href={`tel:${contact.phone}`} className="hover:underline">{contact.phone}</a>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Footer */}
+          <div className="text-center py-4 text-xs" style={{ color: mutedColor }}>
+            {lc.footerText && <p className="mb-1">{lc.footerText}</p>}
+            {showPoweredBy && (
+              <p className="opacity-60">Powered by <a href="https://signflow.ink" className="hover:underline">SignFlow</a></p>
             )}
           </div>
+          
+          {/* Custom CSS injection */}
+          {lc.customCss && <style dangerouslySetInnerHTML={{ __html: lc.customCss }} />}
         </div>
-      )}
+        );
+      })()}
 
       {view === ViewMode.NOT_FOUND && (
         <div className="flex items-center justify-center min-h-screen text-center px-6">

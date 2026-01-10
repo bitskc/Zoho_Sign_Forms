@@ -14,6 +14,38 @@ async function getUserFromAuthHeader(req: Request) {
 
 function toCamel(record: any) {
   if (!record) return record;
+  
+  // Convert snake_case landing_config keys to camelCase
+  let landingConfig = record.landing_config;
+  if (landingConfig && typeof landingConfig === 'object') {
+    landingConfig = {
+      headline: landingConfig.headline,
+      description: landingConfig.description,
+      logoUrl: landingConfig.logo_url,
+      logoAlt: landingConfig.logo_alt,
+      theme: landingConfig.theme ? {
+        primaryColor: landingConfig.theme.primary_color,
+        backgroundColor: landingConfig.theme.background_color,
+        cardColor: landingConfig.theme.card_color,
+        textColor: landingConfig.theme.text_color,
+        mutedColor: landingConfig.theme.muted_color,
+        accentColor: landingConfig.theme.accent_color,
+        darkMode: landingConfig.theme.dark_mode
+      } : undefined,
+      contact: landingConfig.contact ? {
+        companyName: landingConfig.contact.company_name,
+        email: landingConfig.contact.email,
+        phone: landingConfig.contact.phone,
+        website: landingConfig.contact.website,
+        address: landingConfig.contact.address
+      } : undefined,
+      footerText: landingConfig.footer_text,
+      showPoweredBy: landingConfig.show_powered_by,
+      customCss: landingConfig.custom_css,
+      buttonText: landingConfig.button_text
+    };
+  }
+  
   return {
     id: record.id,
     userId: record.user_id,
@@ -24,7 +56,8 @@ function toCamel(record: any) {
     apiDomain: record.api_domain,
     accessToken: record.access_token,
     qrStableId: record.qr_stable_id,
-    createdAt: record.created_at ? Date.parse(record.created_at as any) : null
+    createdAt: record.created_at ? Date.parse(record.created_at as any) : null,
+    landingConfig: landingConfig || undefined
   };
 }
 
@@ -45,7 +78,7 @@ export default async function handler(req: Request) {
       
       const { data, error } = await supabaseServer
         .from(table)
-        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
+        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
         .eq('slug', slug)
         .maybeSingle();
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
@@ -68,7 +101,7 @@ export default async function handler(req: Request) {
 
     const { data, error } = await supabaseServer
       .from(table)
-      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
+      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
@@ -82,7 +115,39 @@ export default async function handler(req: Request) {
     }
 
     const body = await req.json();
-    const record = {
+    
+    // Convert camelCase landingConfig to snake_case for database
+    let landingConfig = body.landingConfig;
+    if (landingConfig && typeof landingConfig === 'object') {
+      landingConfig = {
+        headline: landingConfig.headline,
+        description: landingConfig.description,
+        logo_url: landingConfig.logoUrl,
+        logo_alt: landingConfig.logoAlt,
+        theme: landingConfig.theme ? {
+          primary_color: landingConfig.theme.primaryColor,
+          background_color: landingConfig.theme.backgroundColor,
+          card_color: landingConfig.theme.cardColor,
+          text_color: landingConfig.theme.textColor,
+          muted_color: landingConfig.theme.mutedColor,
+          accent_color: landingConfig.theme.accentColor,
+          dark_mode: landingConfig.theme.darkMode
+        } : undefined,
+        contact: landingConfig.contact ? {
+          company_name: landingConfig.contact.companyName,
+          email: landingConfig.contact.email,
+          phone: landingConfig.contact.phone,
+          website: landingConfig.contact.website,
+          address: landingConfig.contact.address
+        } : undefined,
+        footer_text: landingConfig.footerText,
+        show_powered_by: landingConfig.showPoweredBy,
+        custom_css: landingConfig.customCss,
+        button_text: landingConfig.buttonText
+      };
+    }
+    
+    const record: Record<string, any> = {
       id: body.id,
       user_id: user.id,
       name: body.name,
@@ -94,6 +159,11 @@ export default async function handler(req: Request) {
       // store as ISO for timestamptz column
       created_at: body.createdAt ? new Date(body.createdAt).toISOString() : new Date().toISOString()
     };
+    
+    // Only include landing_config if provided
+    if (landingConfig) {
+      record.landing_config = landingConfig;
+    }
 
     const { data, error } = await supabaseServer
       .from(table)
