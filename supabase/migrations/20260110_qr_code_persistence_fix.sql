@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS form_qrcodes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   form_id UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
-  qr_code_data TEXT NOT NULL, -- URL to QR code image (e.g., https://api.qrserver.com/...)
+  qr_code_data TEXT NOT NULL, -- URL string to QR code image (e.g., https://api.qrserver.com/...), not base64 data
   stable_id TEXT UNIQUE NOT NULL, -- Permanent identifier (e.g., 'qr-abc123')
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -64,4 +64,4 @@ CREATE POLICY "Users can manage their own form QR codes" ON form_qrcodes
 -- Drop existing policy if it exists, then create new one
 DROP POLICY IF EXISTS "Public read access for QR codes" ON form_qrcodes;
 CREATE POLICY "Public read access for QR codes" ON form_qrcodes
-  FOR SELECT USING (true);
+  FOR SELECT USING (auth.role() = 'authenticated' OR auth.role() = 'anon');

@@ -44,6 +44,9 @@ export interface FormDefinition {
   createdAt?: number | null;
   qrStableId?: string; // Permanent QR code identifier
   landingConfig?: LandingConfig; // Landing page customization
+  qrCodeData?: string; // URL to QR code image (e.g., https://api.qrserver.com/...)
+  qrStableIdFromDb?: string; // Stable ID from database
+  qrCreatedAt?: string; // QR code creation timestamp
 }
 
 export interface UserCredentials {
