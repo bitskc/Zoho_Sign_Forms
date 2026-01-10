@@ -63,5 +63,15 @@ CREATE POLICY "Users can manage their own form QR codes" ON form_qrcodes
 
 -- Drop existing policy if it exists, then create new one
 DROP POLICY IF EXISTS "Public read access for QR codes" ON form_qrcodes;
-CREATE POLICY "Public read access for QR codes" ON form_qrcodes
-  FOR SELECT USING (auth.role() = 'authenticated' OR auth.role() = 'anon');
+CREATE POLICY "QR code access control" ON form_qrcodes
+  FOR SELECT USING (
+    -- Allow users to see their own QR codes
+    EXISTS (
+      SELECT 1 FROM forms 
+      WHERE forms.id = form_qrcodes.form_id 
+      AND forms.user_id = auth.uid()
+    )
+    OR
+    -- Allow public access for anonymous QR redirects (needed for /qr/{stable_id} redirects)
+    auth.role() = 'anon'
+  );

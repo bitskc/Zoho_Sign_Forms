@@ -203,8 +203,8 @@ const App: React.FC = () => {
         }
       }
       
-      // Generate QR codes in batches of 3 to avoid overwhelming the API
-      const batchSize = 3;
+      // Generate QR codes in small batches of 2 to be very API-friendly
+      const batchSize = 2;
       for (let i = 0; i < formsNeedingQR.length; i += batchSize) {
         const batch = formsNeedingQR.slice(i, i + batchSize);
         
@@ -232,9 +232,9 @@ const App: React.FC = () => {
           }
         }));
         
-        // Small delay between batches to be API-friendly
+        // Longer delay between batches to be very API-friendly
         if (i + batchSize < formsNeedingQR.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
       
