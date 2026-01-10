@@ -189,10 +189,15 @@ const App: React.FC = () => {
       const data = await res.json();
       setForms(data || []);
       
-      // Auto-generate QR codes for forms that don't have them
+      // Load existing QR codes and generate missing ones
       const newQrCodes = new Map(qrCodes);
       for (const form of (data || [])) {
-        if (!newQrCodes.has(form.id)) {
+        // If form has existing QR code data from database, use it
+        if (form.qrCodeData && !newQrCodes.has(form.id)) {
+          newQrCodes.set(form.id, form.qrCodeData);
+        }
+        // Only generate new QR code if form doesn't have one
+        else if (!form.qrCodeData && !newQrCodes.has(form.id)) {
           try {
             const qrResponse = await fetch('/api/qrcodes', {
               method: 'POST',
@@ -205,11 +210,11 @@ const App: React.FC = () => {
             });
             
             if (qrResponse.ok) {
-              const qrData = await qrResponse.text();
-              newQrCodes.set(form.id, qrData);
+              const qrResult = await qrResponse.json();
+              newQrCodes.set(form.id, qrResult.qrCodeData);
             }
           } catch (error) {
-            console.log(`Failed to auto-generate QR for form ${form.id}:`, error);
+            console.log(`Failed to generate QR for form ${form.id}:`, error);
           }
         }
       }
@@ -948,8 +953,8 @@ const App: React.FC = () => {
       });
       
       if (response.ok) {
-        const qrData = await response.text();
-        setQrCodes(prev => new Map(prev).set(formId, qrData));
+        const qrResult = await response.json();
+        setQrCodes(prev => new Map(prev).set(formId, qrResult.qrCodeData));
       }
     } catch (error) {
       console.error('Error regenerating QR code:', error);
