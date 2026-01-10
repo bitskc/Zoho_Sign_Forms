@@ -76,11 +76,30 @@ export default async function handler(req: Request) {
         return createRateLimitResponse(rateLimitResult);
       }
       
-      const { data, error } = await supabaseServer
-        .from(table)
-        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
-        .eq('slug', slug)
-        .maybeSingle();
+      // Try with landing_config first, fall back to without if column doesn't exist
+      let data, error;
+      try {
+        const result = await supabaseServer
+          .from(table)
+          .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
+          .eq('slug', slug)
+          .maybeSingle();
+        data = result.data;
+        error = result.error;
+        
+        // If error mentions landing_config column, retry without it
+        if (error?.message?.includes('landing_config')) {
+          const fallbackResult = await supabaseServer
+            .from(table)
+            .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
+            .eq('slug', slug)
+            .maybeSingle();
+          data = fallbackResult.data;
+          error = fallbackResult.error;
+        }
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Database query failed' }), { status: 500 });
+      }
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
       if (!data) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
       
@@ -99,11 +118,31 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
 
-    const { data, error } = await supabaseServer
-      .from(table)
-      .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+    // Try with landing_config first, fall back to without if column doesn't exist
+    let data, error;
+    try {
+      const result = await supabaseServer
+        .from(table)
+        .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      data = result.data;
+      error = result.error;
+      
+      // If error mentions landing_config column, retry without it
+      if (error?.message?.includes('landing_config')) {
+        const fallbackResult = await supabaseServer
+          .from(table)
+          .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Database query failed' }), { status: 500 });
+    }
+    
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
     return new Response(JSON.stringify((data || []).map(toCamel)), { status: 200 });
   }
