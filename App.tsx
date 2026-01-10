@@ -132,6 +132,22 @@ const App: React.FC = () => {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrModalForm, setQrModalForm] = useState<FormDefinition | null>(null);
   
+  // Form Details page state
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [detailsTab, setDetailsTab] = useState<'settings' | 'landing' | 'qr' | 'analytics'>('settings');
+  
+  // Landing page editor state
+  const [landingHeadline, setLandingHeadline] = useState('');
+  const [landingDescription, setLandingDescription] = useState('');
+  const [landingLogoUrl, setLandingLogoUrl] = useState('');
+  const [landingPrimaryColor, setLandingPrimaryColor] = useState('#3B82F6');
+  const [landingButtonText, setLandingButtonText] = useState('Sign Now');
+  const [landingCompanyName, setLandingCompanyName] = useState('');
+  const [landingContactEmail, setLandingContactEmail] = useState('');
+  const [landingContactPhone, setLandingContactPhone] = useState('');
+  const [landingFooterText, setLandingFooterText] = useState('');
+  const [landingShowPoweredBy, setLandingShowPoweredBy] = useState(true);
+  
   // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
@@ -542,6 +558,42 @@ const App: React.FC = () => {
     setError(null);
   };
 
+  // Open the form details page with all settings loaded
+  const openFormDetails = (form: FormDefinition) => {
+    setSelectedFormId(form.id);
+    setDetailsTab('settings');
+    
+    // Load basic form settings into editor
+    setEditingId(form.id);
+    setFormName(form.name);
+    setTemplateId(form.templateId);
+    setRoleName(form.roleName);
+    setApiDomain(form.apiDomain || 'https://sign.zoho.com');
+    setSlug(form.slug);
+    
+    // Load landing page config
+    const lc = form.landingConfig || {};
+    setLandingHeadline(lc.headline || '');
+    setLandingDescription(lc.description || '');
+    setLandingLogoUrl(lc.logoUrl || '');
+    setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+    setLandingButtonText(lc.buttonText || 'Sign Now');
+    setLandingCompanyName(lc.contact?.companyName || '');
+    setLandingContactEmail(lc.contact?.email || '');
+    setLandingContactPhone(lc.contact?.phone || '');
+    setLandingFooterText(lc.footerText || '');
+    setLandingShowPoweredBy(lc.showPoweredBy !== false);
+    
+    setError(null);
+    setView(ViewMode.FORM_DETAILS);
+    window.location.hash = `#/admin/form/${form.id}`;
+  };
+
+  // Get the currently selected form object
+  const getSelectedForm = (): FormDefinition | undefined => {
+    return forms.find(f => f.id === selectedFormId);
+  };
+
   const saveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionToken) {
@@ -580,7 +632,22 @@ const App: React.FC = () => {
       apiDomain: apiDomain.trim(),
       userId: userId || undefined,
       accessToken: sessionToken, // Required by database
-      createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now()
+      createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now(),
+      // Include landing config if any values are set
+      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
+        headline: landingHeadline || undefined,
+        description: landingDescription || undefined,
+        logoUrl: landingLogoUrl || undefined,
+        theme: landingPrimaryColor !== '#3B82F6' ? { primaryColor: landingPrimaryColor } : undefined,
+        buttonText: landingButtonText !== 'Sign Now' ? landingButtonText : undefined,
+        contact: (landingCompanyName || landingContactEmail || landingContactPhone) ? {
+          companyName: landingCompanyName || undefined,
+          email: landingContactEmail || undefined,
+          phone: landingContactPhone || undefined
+        } : undefined,
+        footerText: landingFooterText || undefined,
+        showPoweredBy: landingShowPoweredBy
+      } : undefined
     };
     
     console.log('Saving form:', formDef);
@@ -1063,101 +1130,352 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Right Column */}
-            <div className="lg:col-span-7 space-y-8">
+            {/* Right Column - Forms List */}
+            <div className="lg:col-span-7 space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className={`text-2xl font-black ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Your Forms</h2>
                 <button onClick={() => { clearForm(); setEditingId(null); }} className={`text-sm font-semibold ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>+ New</button>
               </div>
 
               {testResult && (
-                <div className={`mb-8 p-6 rounded-3xl border-2 flex items-start justify-between animate-in slide-in-from-top duration-300 ${testResult.success
+                <div className={`p-4 rounded-xl border flex items-start justify-between animate-in slide-in-from-top duration-300 ${testResult.success
                   ? (darkMode ? 'bg-green-950 border-green-900 text-green-200' : 'bg-green-50 border-green-100 text-green-700')
                   : (darkMode ? 'bg-red-950 border-red-900 text-red-200' : 'bg-red-50 border-red-100 text-red-700')}`}>
                   <div>
-                    <p className="font-black text-sm mb-1">{testResult.success ? '✓ Connection Verified' : '✕ Connection Error'}</p>
+                    <p className="font-bold text-sm mb-1">{testResult.success ? '✓ Connection Verified' : '✕ Connection Error'}</p>
                     <p className="text-xs opacity-80">{testResult.message}</p>
-                    {testResult.hint && <p className="text-[10px] mt-2 font-bold italic">Tip: {testResult.hint}</p>}
                   </div>
-                  <button onClick={() => setTestResult(null)} className={`${darkMode ? 'text-slate-400 hover:text-slate-200' : 'opacity-50 hover:opacity-100'}`}>✕</button>
+                  <button onClick={() => setTestResult(null)} className="opacity-50 hover:opacity-100 text-lg">×</button>
                 </div>
               )}
 
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} rounded-2xl shadow-sm overflow-hidden border`}>
-                <table className="w-full text-left">
-                  <thead className={`${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50/50 border-slate-100'}`}>
-                    <tr>
-                      <th className={`px-6 py-4 text-[10px] font-black uppercase tracking-widest ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>Portal Name</th>
-                      <th className={`px-6 py-4 text-[10px] font-black uppercase tracking-widest text-right ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>Control</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`${darkMode ? 'divide-slate-800' : 'divide-slate-100'} divide-y`}>
-                    {forms.map(form => (
-                      <tr key={form.id} className={`transition-colors ${darkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50/50'}`}>
-                        <td className="px-6 py-6">
-                          <p className={`font-black text-lg mb-1 ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>{form.name}</p>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                             <span className={`text-[10px] px-2 py-1 rounded font-bold ${darkMode ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-500'}`}>TEMPLATE: {form.templateId}</span>
-                             <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-50 text-blue-600'}`}>{form.apiDomain.split('.').pop()}</span>
-                             <span className="text-[10px] bg-slate-900 text-slate-200 px-2 py-1 rounded font-mono">Live</span>
-                          </div>
-                          <div className="flex items-center gap-2 group mb-3">
-                             <code className={`text-[10px] font-bold px-2 py-1 rounded ${darkMode ? 'text-blue-200 bg-blue-900/40' : 'text-blue-600 bg-blue-50/50'}`}>/{form.slug}</code>
-                             <button onClick={() => {
-                                const url = `${window.location.origin}/${form.slug}`;
-                                navigator.clipboard.writeText(url);
-                                alert("Link copied to clipboard!");
-                             }} className={`${darkMode ? 'text-slate-400 hover:text-blue-300' : 'text-slate-300 hover:text-blue-500'} p-1`}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg></button>
-                          </div>
-                          {/* QR Code Section */}
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => {
-                                setQrModalForm(form);
-                                setQrModalOpen(true);
-                              }} 
-                              className={`text-[10px] px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                              </svg>
-                              QR Code
-                            </button>
-                          </div>
-                          {/* Analytics Preview */}
-                          {analytics.has(form.id) && (
-                            <div className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`} aria-label="Analytics summary">
-                              Analytics: {analytics.get(form.id).summary.totalVisits} visits · {analytics.get(form.id).summary.successfulSubmissions} submissions
-                            </div>
-                          )}
-                          {!analytics.has(form.id) && sessionToken && (
-                            <button onClick={() => fetchAnalytics(form.id)} className={`mt-2 text-[10px] ${darkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'}`}>
-                              View Analytics
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-6 py-6">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => runConnectionTest(form)} disabled={testingId === form.id} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-green-900 text-green-200 hover:bg-green-600 hover:text-white' : 'bg-green-50 text-green-600 hover:bg-green-600 hover:text-white'}`}>
-                               {testingId === form.id ? <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> : <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-                            </button>
-                            <button onClick={() => startEdit(form)} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-blue-900 text-blue-200 hover:bg-blue-600 hover:text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                            <button onClick={() => deleteForm(form.id)} className={`p-3 rounded-xl transition-all shadow-sm ${darkMode ? 'bg-red-900 text-red-200 hover:bg-red-600 hover:text-white' : 'bg-red-50 text-red-500 hover:bg-red-600 hover:text-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {forms.length === 0 && (
-                      <tr><td colSpan={2} className="px-6 py-14 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">No active integrations found</td></tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Forms Grid - Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {forms.map(form => (
+                  <div 
+                    key={form.id} 
+                    onClick={() => openFormDetails(form)}
+                    className={`${darkMode ? 'bg-slate-900 border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-400'} p-5 rounded-xl border cursor-pointer transition-all hover:shadow-lg group`}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`font-bold text-lg truncate ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>{form.name}</h3>
+                        <code className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{form.slug}</code>
+                      </div>
+                      <div className={`w-2 h-2 rounded-full bg-green-500 mt-2`} title="Live"></div>
+                    </div>
+                    
+                    {/* Quick Stats */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded ${darkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                        {form.apiDomain.split('.').pop()?.toUpperCase()}
+                      </span>
+                      {form.landingConfig?.logoUrl && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded ${darkMode ? 'bg-purple-900/50 text-purple-300' : 'bg-purple-50 text-purple-600'}`}>
+                          Branded
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Quick Actions (stop propagation so card click doesn't fire) */}
+                    <div className="flex items-center gap-2 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/${form.slug}`); alert('Link copied!'); }}
+                        className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+                      >
+                        Copy Link
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setQrModalForm(form); setQrModalOpen(true); }}
+                        className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+                      >
+                        QR Code
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); runConnectionTest(form); }}
+                        disabled={testingId === form.id}
+                        className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-green-400 hover:text-green-300 hover:bg-green-900/30' : 'text-green-600 hover:text-green-700 hover:bg-green-50'}`}
+                      >
+                        {testingId === form.id ? 'Testing...' : 'Test'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                
+                {forms.length === 0 && (
+                  <div className={`col-span-2 p-12 text-center rounded-xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}>
+                    <p className="font-semibold mb-2">No forms yet</p>
+                    <p className="text-sm">Create your first form using the panel on the left</p>
+                  </div>
+                )}
               </div>
 
             </div>
           </div>
         </div>
       )}
+
+      {/* Form Details Page */}
+      {view === ViewMode.FORM_DETAILS && (() => {
+        const selectedForm = getSelectedForm();
+        if (!selectedForm) {
+          return (
+            <div className="max-w-4xl mx-auto p-6 lg:p-12 text-center">
+              <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>Form not found</p>
+              <button onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
+                Back to Dashboard
+              </button>
+            </div>
+          );
+        }
+        
+        return (
+        <div className="max-w-5xl mx-auto p-6 lg:p-12">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }}
+                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div>
+                <h1 className={`text-2xl font-bold ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{selectedForm.name}</h1>
+                <code className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{selectedForm.slug}</code>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a 
+                href={`/${selectedForm.slug}`} 
+                target="_blank" 
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              >
+                View Live →
+              </a>
+              <button 
+                onClick={() => deleteForm(selectedForm.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${darkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-600 hover:bg-red-50'}`}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          
+          {/* Tabs */}
+          <div className={`flex gap-1 p-1 rounded-lg mb-6 ${darkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
+            {[
+              { id: 'settings', label: 'Settings' },
+              { id: 'landing', label: 'Landing Page' },
+              { id: 'qr', label: 'QR Code' },
+              { id: 'analytics', label: 'Analytics' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setDetailsTab(tab.id as any)}
+                className={`flex-1 px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${
+                  detailsTab === tab.id 
+                    ? (darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-900 shadow-sm')
+                    : (darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700')
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          
+          {error && (
+            <div className={`mb-6 p-4 rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+              {error}
+            </div>
+          )}
+          
+          {/* Settings Tab */}
+          {detailsTab === 'settings' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <h2 className={`text-lg font-bold mb-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Form Settings</h2>
+              <form onSubmit={saveForm} className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Display Name</label>
+                    <input required value={formName} onChange={e => setFormName(e.target.value)} className={`w-full px-4 py-3 rounded-lg text-sm font-medium outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>URL Slug</label>
+                    <input required value={slug} onChange={e => setSlug(e.target.value)} className={`w-full px-4 py-3 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Zoho Template ID</label>
+                    <input required value={templateId} onChange={e => setTemplateId(e.target.value)} className={`w-full px-4 py-3 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Signer Role</label>
+                    <input required value={roleName} onChange={e => setRoleName(e.target.value)} className={`w-full px-4 py-3 rounded-lg text-sm font-medium outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>API Domain</label>
+                  <input required value={apiDomain} onChange={e => setApiDomain(e.target.value)} className={`w-full px-4 py-3 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-slate-50 border-slate-200 text-slate-900'}`} />
+                </div>
+                <div className="pt-4">
+                  <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    {loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+          
+          {/* Landing Page Tab */}
+          {detailsTab === 'landing' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Landing Page Design</h2>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Customize how your form page looks to visitors</p>
+              
+              <form onSubmit={saveForm} className="space-y-6">
+                {/* Branding Section */}
+                <div className={`p-5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <h3 className={`text-sm font-semibold mb-4 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>Branding</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Logo URL</label>
+                      <input value={landingLogoUrl} onChange={e => setLandingLogoUrl(e.target.value)} placeholder="https://yoursite.com/logo.png" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color</label>
+                        <div className="flex gap-2">
+                          <input type="color" value={landingPrimaryColor} onChange={e => setLandingPrimaryColor(e.target.value)} className="w-12 h-10 rounded cursor-pointer" />
+                          <input value={landingPrimaryColor} onChange={e => setLandingPrimaryColor(e.target.value)} className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Button Text</label>
+                        <input value={landingButtonText} onChange={e => setLandingButtonText(e.target.value)} placeholder="Sign Now" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Content Section */}
+                <div className={`p-5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <h3 className={`text-sm font-semibold mb-4 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>Content</h3>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Headline (optional)</label>
+                      <input value={landingHeadline} onChange={e => setLandingHeadline(e.target.value)} placeholder={formName || 'Leave blank to use form name'} className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Description</label>
+                      <textarea value={landingDescription} onChange={e => setLandingDescription(e.target.value)} placeholder="Describe what this form is for..." rows={3} className={`w-full px-4 py-3 rounded-lg text-sm outline-none border resize-none ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Contact Info Section */}
+                <div className={`p-5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <h3 className={`text-sm font-semibold mb-4 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>Contact Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Company Name</label>
+                      <input value={landingCompanyName} onChange={e => setLandingCompanyName(e.target.value)} placeholder="ACME Inc." className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Email</label>
+                      <input value={landingContactEmail} onChange={e => setLandingContactEmail(e.target.value)} placeholder="support@example.com" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Phone</label>
+                      <input value={landingContactPhone} onChange={e => setLandingContactPhone(e.target.value)} placeholder="(555) 123-4567" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Footer Text</label>
+                      <input value={landingFooterText} onChange={e => setLandingFooterText(e.target.value)} placeholder="© 2026 Your Company" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Options Section */}
+                <div className={`p-5 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                  <h3 className={`text-sm font-semibold mb-4 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>Options</h3>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={landingShowPoweredBy} onChange={e => setLandingShowPoweredBy(e.target.checked)} className="w-4 h-4 rounded" />
+                    <span className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>Show "Powered by SignFlow" badge</span>
+                  </label>
+                </div>
+                
+                <div className="pt-4">
+                  <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+                    {loading ? 'Saving...' : 'Save Landing Page'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+          
+          {/* QR Code Tab */}
+          {detailsTab === 'qr' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>QR Code</h2>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Generate and download QR codes for print materials</p>
+              
+              <div className="text-center py-8">
+                <button 
+                  onClick={() => { setQrModalForm(selectedForm); setQrModalOpen(true); }}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  Open QR Code Generator
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Analytics Tab */}
+          {detailsTab === 'analytics' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Analytics</h2>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Track form visits and submissions</p>
+              
+              {analytics.has(selectedForm.id) ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
+                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
+                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                      {analytics.get(selectedForm.id).summary.totalVisits > 0 
+                        ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
+                        : 0}%
+                    </p>
+                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <button 
+                    onClick={() => fetchAnalytics(selectedForm.id)}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  >
+                    Load Analytics
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        );
+      })()}
 
       {view === ViewMode.ADMIN_SETTINGS && (
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
