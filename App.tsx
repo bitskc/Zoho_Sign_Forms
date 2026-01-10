@@ -143,6 +143,7 @@ const App: React.FC = () => {
   const [landingDescription, setLandingDescription] = useState('');
   const [landingLogoUrl, setLandingLogoUrl] = useState('');
   const [landingPrimaryColor, setLandingPrimaryColor] = useState('#3B82F6');
+  const [landingBackgroundColor, setLandingBackgroundColor] = useState('#F8FAFC');
   const [landingButtonText, setLandingButtonText] = useState('Sign Now');
   const [landingCompanyName, setLandingCompanyName] = useState('');
   const [landingContactEmail, setLandingContactEmail] = useState('');
@@ -153,6 +154,7 @@ const App: React.FC = () => {
   // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
+  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
 
   
@@ -186,6 +188,32 @@ const App: React.FC = () => {
       }
       const data = await res.json();
       setForms(data || []);
+      
+      // Auto-generate QR codes for forms that don't have them
+      const newQrCodes = new Map(qrCodes);
+      for (const form of (data || [])) {
+        if (!newQrCodes.has(form.id)) {
+          try {
+            const qrResponse = await fetch('/api/qrcodes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                formId: form.id,
+                templateId: form.templateId,
+                slug: form.slug || `form-${form.id}`
+              })
+            });
+            
+            if (qrResponse.ok) {
+              const qrData = await qrResponse.text();
+              newQrCodes.set(form.id, qrData);
+            }
+          } catch (error) {
+            console.log(`Failed to auto-generate QR for form ${form.id}:`, error);
+          }
+        }
+      }
+      setQrCodes(newQrCodes);
     } catch (e) {
       console.error('fetch forms error', e);
       setForms([]);
@@ -616,6 +644,7 @@ const App: React.FC = () => {
     setLandingDescription(lc.description || '');
     setLandingLogoUrl(lc.logoUrl || '');
     setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+    setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
     setLandingButtonText(lc.buttonText || 'Sign Now');
     setLandingCompanyName(lc.contact?.companyName || '');
     setLandingContactEmail(lc.contact?.email || '');
@@ -673,11 +702,14 @@ const App: React.FC = () => {
       accessToken: sessionToken, // Required by database
       createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now(),
       // Include landing config if any values are set
-      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
+      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
         headline: landingHeadline || undefined,
         description: landingDescription || undefined,
         logoUrl: landingLogoUrl || undefined,
-        theme: landingPrimaryColor !== '#3B82F6' ? { primaryColor: landingPrimaryColor } : undefined,
+        theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC') ? {
+          primaryColor: landingPrimaryColor !== '#3B82F6' ? landingPrimaryColor : undefined,
+          backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined
+        } : undefined,
         buttonText: landingButtonText !== 'Sign Now' ? landingButtonText : undefined,
         contact: (landingCompanyName || landingContactEmail || landingContactPhone) ? {
           companyName: landingCompanyName || undefined,
@@ -895,6 +927,32 @@ const App: React.FC = () => {
         next.delete(formId);
         return next;
       });
+    }
+  };
+
+  // Regenerate QR code for a form
+  const regenerateQR = async (formId: string) => {
+    try {
+      const form = forms.find(f => f.id === formId);
+      if (!form) return;
+      
+      const response = await fetch('/api/qrcodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formId: form.id,
+          templateId: form.templateId,
+          slug: form.slug || `form-${form.id}`,
+          regenerate: true
+        })
+      });
+      
+      if (response.ok) {
+        const qrData = await response.text();
+        setQrCodes(prev => new Map(prev).set(formId, qrData));
+      }
+    } catch (error) {
+      console.error('Error regenerating QR code:', error);
     }
   };
 
@@ -1312,7 +1370,13 @@ const App: React.FC = () => {
             ].map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setDetailsTab(tab.id as any)}
+                onClick={() => {
+                  setDetailsTab(tab.id as any);
+                  // Auto-load analytics when analytics tab is clicked
+                  if (tab.id === 'analytics' && selectedForm && !analytics.has(selectedForm.id)) {
+                    fetchAnalytics(selectedForm.id);
+                  }
+                }}
                 className={`flex-1 px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${
                   detailsTab === tab.id 
                     ? (darkMode ? 'bg-slate-800 text-white' : 'bg-white text-slate-900 shadow-sm')
@@ -1392,9 +1456,16 @@ const App: React.FC = () => {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Button Text</label>
-                        <input value={landingButtonText} onChange={e => setLandingButtonText(e.target.value)} placeholder="Sign Now" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color</label>
+                        <div className="flex gap-2">
+                          <input type="color" value={landingBackgroundColor} onChange={e => setLandingBackgroundColor(e.target.value)} className="w-12 h-10 rounded cursor-pointer" />
+                          <input value={landingBackgroundColor} onChange={e => setLandingBackgroundColor(e.target.value)} className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
+                        </div>
                       </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Button Text</label>
+                      <input value={landingButtonText} onChange={e => setLandingButtonText(e.target.value)} placeholder="Sign Now" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                     </div>
                   </div>
                 </div>
@@ -1458,28 +1529,65 @@ const App: React.FC = () => {
           {/* QR Code Tab */}
           {detailsTab === 'qr' && (
             <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
-              <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>QR Code</h2>
-              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Generate and download QR codes for print materials</p>
-              
-              <div className="text-center py-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>QR Code</h2>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Download QR codes for print materials</p>
+                </div>
                 <button 
-                  onClick={() => { setQrModalForm(selectedForm); setQrModalOpen(true); }}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                  onClick={() => regenerateQR(selectedForm.id)}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                  </svg>
-                  Open QR Code Generator
+                  Regenerate
                 </button>
               </div>
+              
+              {qrCodes.has(selectedForm.id) ? (
+                <div className="text-center">
+                  <div className="inline-block p-4 bg-white rounded-lg mb-4" dangerouslySetInnerHTML={{ __html: qrCodes.get(selectedForm.id) }} />
+                  <div className="flex gap-2 justify-center">
+                    <button 
+                      onClick={() => { setQrModalForm(selectedForm); setQrModalOpen(true); }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      Download QR Code
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>QR code is being generated...</p>
+                  <button 
+                    onClick={() => regenerateQR(selectedForm.id)}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                    Generate QR Code
+                  </button>
+                </div>
+              )}
             </div>
           )}
           
           {/* Analytics Tab */}
           {detailsTab === 'analytics' && (
             <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
-              <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Analytics</h2>
-              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Track form visits and submissions</p>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Analytics</h2>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Track form visits and submissions</p>
+                </div>
+                {analytics.has(selectedForm.id) && (
+                  <button 
+                    onClick={() => fetchAnalytics(selectedForm.id)}
+                    className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm"
+                  >
+                    Refresh
+                  </button>
+                )}
+              </div>
               
               {analytics.has(selectedForm.id) ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
