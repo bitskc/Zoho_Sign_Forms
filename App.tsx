@@ -832,15 +832,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Loading state for public form pages (fast, minimal) */}
-      {view === ViewMode.PUBLIC_FORM && isFormLoading && !currentForm && (
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
-            <p className={`${darkMode ? 'text-slate-500' : 'text-slate-400'} text-sm`}>Loading form...</p>
-          </div>
-        </div>
-      )}
+      {/* Public form loading spinner removed - now using optimistic rendering */}
 
       {isRouteResolved && view === ViewMode.LANDING && (
         <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
@@ -1239,44 +1231,7 @@ const App: React.FC = () => {
       {view === ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className="w-full max-w-md">
-            {!currentForm ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl text-center border`}>
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} font-medium text-sm`}>Loading form...</p>
-              </div>
-            ) : !successData ? (
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl animate-in fade-in duration-700 border`}>
-                <div className="text-center mb-8">
-                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
-                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  </div>
-                  <h1 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{currentForm.name}</h1>
-                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm`}>Digital Signature Gateway</p>
-                </div>
-                <form onSubmit={(e) => {
-                  e.preventDefault();
-                  const target = e.target as any;
-                  handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
-                }} className="space-y-5">
-                  <div className="space-y-2">
-                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Full Name</label>
-                    <input required name="signerName" placeholder="John Doe" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Email Address</label>
-                    <input required name="signerEmail" type="email" placeholder="john@example.com" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                  </div>
-                  {error && (
-                    <div className={`p-3 text-xs font-medium rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
-                       {error}
-                    </div>
-                  )}
-                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-bold text-base shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
-                    {loading ? "Preparing Document..." : "Sign Now"}
-                  </button>
-                </form>
-              </div>
-            ) : (
+            {successData ? (
               <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border`}>
                 <div className={`w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6 ${darkMode ? 'bg-green-900/50 text-green-300' : 'bg-green-50 text-green-600'}`}>
                   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
@@ -1291,6 +1246,48 @@ const App: React.FC = () => {
                   </div>
                 )}
                 <button onClick={() => setSuccessData(null)} className={`mt-6 font-semibold text-xs uppercase tracking-wider transition-colors ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>Go Back</button>
+              </div>
+            ) : (
+              /* Form shows IMMEDIATELY - no waiting for API */
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900'} p-8 rounded-lg shadow-xl border`}>
+                <div className="text-center mb-8">
+                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
+                    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  </div>
+                  {/* Show form name if loaded, otherwise show loading placeholder */}
+                  <h1 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>
+                    {currentForm?.name || (
+                      <span className={`inline-block h-7 w-48 rounded ${darkMode ? 'bg-slate-800' : 'bg-slate-200'} animate-pulse`}></span>
+                    )}
+                  </h1>
+                  <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm`}>Digital Signature Gateway</p>
+                </div>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!currentForm) {
+                    setError('Form is still loading. Please wait a moment and try again.');
+                    return;
+                  }
+                  const target = e.target as any;
+                  handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
+                }} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Full Name</label>
+                    <input required name="signerName" placeholder="John Doe" autoFocus className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Email Address</label>
+                    <input required name="signerEmail" type="email" placeholder="john@example.com" className={`w-full px-4 py-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 font-medium text-base border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                  </div>
+                  {error && (
+                    <div className={`p-3 text-xs font-medium rounded-lg ${darkMode ? 'bg-red-950/50 text-red-300 border border-red-900' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                       {error}
+                    </div>
+                  )}
+                  <button disabled={loading} className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-bold text-base shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50">
+                    {loading ? "Preparing Document..." : "Sign Now"}
+                  </button>
+                </form>
               </div>
             )}
           </div>
