@@ -154,7 +154,6 @@ const App: React.FC = () => {
   // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
-  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
 
   
@@ -201,7 +200,10 @@ const App: React.FC = () => {
           try {
             const qrResponse = await fetch('/api/qrcodes', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
               body: JSON.stringify({
                 formId: form.id,
                 templateId: form.templateId,
@@ -937,13 +939,18 @@ const App: React.FC = () => {
 
   // Regenerate QR code for a form
   const regenerateQR = async (formId: string) => {
+    if (!sessionToken) return;
+    
     try {
       const form = forms.find(f => f.id === formId);
       if (!form) return;
       
       const response = await fetch('/api/qrcodes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
         body: JSON.stringify({
           formId: form.id,
           templateId: form.templateId,
