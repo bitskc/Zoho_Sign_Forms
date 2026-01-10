@@ -21,6 +21,25 @@ const isValidSlug = (slug: string): boolean => {
   return true;
 };
 
+// Convert slug to display title (e.g., "fbmc-short-application" -> "FBMC Short Application")
+const slugToTitle = (slug: string): string => {
+  return slug
+    .split('-')
+    .map(word => {
+      // Keep common acronyms uppercase
+      if (word.length <= 4 && /^[a-z]+$/.test(word)) {
+        const upper = word.toUpperCase();
+        // Common acronyms that should stay uppercase
+        if (['FBMC', 'LLC', 'INC', 'USA', 'FAQ', 'PDF', 'API'].includes(upper)) {
+          return upper;
+        }
+      }
+      // Title case for regular words
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+};
+
 // Extend window for ZohoSign SDK
 declare global {
   interface Window {
@@ -1254,11 +1273,9 @@ const App: React.FC = () => {
                   <div className={`inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4 ${darkMode ? 'bg-slate-800 text-blue-300' : 'bg-blue-50 text-blue-600'}`}>
                     <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                   </div>
-                  {/* Show form name if loaded, otherwise show loading placeholder */}
+                  {/* Show form name instantly from slug, update if API returns different name */}
                   <h1 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>
-                    {currentForm?.name || (
-                      <span className={`inline-block h-7 w-48 rounded ${darkMode ? 'bg-slate-800' : 'bg-slate-200'} animate-pulse`}></span>
-                    )}
+                    {currentForm?.name || slugToTitle(window.location.pathname.substring(1).replace(/\/$/, ''))}
                   </h1>
                   <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-sm`}>Digital Signature Gateway</p>
                 </div>
