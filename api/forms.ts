@@ -79,19 +79,22 @@ export default async function handler(req: Request) {
         return createRateLimitResponse(rateLimitResult);
       }
       
-      // Try with landing_config first, fall back to without if column doesn't exist
+      // Try with landing_config and QR codes first, fall back to without if columns don't exist
       let data, error;
       try {
         const result = await supabaseServer
           .from(table)
-          .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config')
+          .select(`
+            id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config,
+            form_qrcodes(qr_code_data, stable_id, created_at)
+          `)
           .eq('slug', slug)
           .maybeSingle();
         data = result.data;
         error = result.error;
         
-        // If error mentions landing_config column, retry without it
-        if (error?.message?.includes('landing_config')) {
+        // If error mentions landing_config or form_qrcodes columns, retry without them
+        if (error?.message?.includes('landing_config') || error?.message?.includes('form_qrcodes')) {
           const fallbackResult = await supabaseServer
             .from(table)
             .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')

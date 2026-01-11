@@ -155,6 +155,7 @@ const App: React.FC = () => {
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
   const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
+  const [loadingAnalytics, setLoadingAnalytics] = useState<Set<string>>(new Set());
 
   
   // Debounce flags to prevent infinite retry loops
@@ -188,6 +189,14 @@ const App: React.FC = () => {
       }
       const data = await res.json();
       setForms(data || []);
+      
+      // Auto-load analytics for all forms in the background
+      if (data && data.length > 0) {
+        for (const form of data) {
+          // Load analytics for each form (don't await to prevent blocking)
+          fetchAnalytics(form.id).catch(e => console.warn('Background analytics load failed for form', form.id, e));
+        }
+      }
       
       // Load existing QR codes and generate missing ones (with batching for performance)
       // Prevent concurrent batch processing
@@ -658,6 +667,18 @@ const App: React.FC = () => {
     setApiDomain('https://sign.zoho.com');
     setSlug('');
     setError(null);
+    // Clear landing page customization fields
+    setLandingHeadline('');
+    setLandingDescription('');
+    setLandingLogoUrl('');
+    setLandingPrimaryColor('#3B82F6');
+    setLandingBackgroundColor('#F8FAFC');
+    setLandingButtonText('Sign Now');
+    setLandingCompanyName('');
+    setLandingContactEmail('');
+    setLandingContactPhone('');
+    setLandingFooterText('');
+    setLandingShowPoweredBy(true);
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -791,8 +812,15 @@ const App: React.FC = () => {
     const saved = await res.json();
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
+    
+    // If we're viewing this form's details, also update currentForm with the latest data
+    if (selectedFormId === (editingId || saved.id)) {
+      setCurrentForm(saved);
+    }
+    
     clearForm();
     setLoading(false);
+    setDetailsTab('landing'); // Stay on landing tab after save
   };
 
   const deleteForm = async (id: string) => {
@@ -1014,6 +1042,11 @@ const App: React.FC = () => {
   const fetchAnalytics = async (formId: string) => {
     if (!sessionToken) return;
     
+    // Prevent duplicate requests
+    if (loadingAnalytics.has(formId)) return;
+    
+    setLoadingAnalytics(prev => new Set(prev).add(formId));
+    
     try {
       const res = await fetch(`/api/analytics?formId=${formId}`, {
         headers: { Authorization: `Bearer ${sessionToken}` }
@@ -1022,9 +1055,26 @@ const App: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setAnalytics(prev => new Map(prev).set(formId, data));
+      } else if (res.status === 404) {
+        // Form not found - set empty analytics
+        setAnalytics(prev => new Map(prev).set(formId, {
+          summary: { totalVisits: 0, totalSubmissions: 0, successfulSubmissions: 0, conversionRate: 0 },
+          recentEvents: []
+        }));
       }
     } catch (e) {
       console.error('Failed to fetch analytics:', e);
+      // Set empty analytics on error
+      setAnalytics(prev => new Map(prev).set(formId, {
+        summary: { totalVisits: 0, totalSubmissions: 0, successfulSubmissions: 0, conversionRate: 0 },
+        recentEvents: []
+      }));
+    } finally {
+      setLoadingAnalytics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(formId);
+        return newSet;
+      });
     }
   };
 
@@ -1055,6 +1105,18 @@ const App: React.FC = () => {
       }
     }
   }, [view, currentForm?.id]);
+
+  // Auto-load analytics when admin dashboard is accessed
+  useEffect(() => {
+    if (view === ViewMode.ADMIN_DASHBOARD && sessionToken && forms.length > 0) {
+      // Load analytics for all forms if not already loaded
+      for (const form of forms) {
+        if (!analytics.has(form.id)) {
+          fetchAnalytics(form.id).catch(e => console.warn('Analytics auto-load failed for form', form.id, e));
+        }
+      }
+    }
+  }, [view, sessionToken, forms.length]);
 
 
   return (
@@ -1647,24 +1709,42 @@ const App: React.FC = () => {
                 )}
               </div>
               
-              {analytics.has(selectedForm.id) ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
+              {loadingAnalytics.has(selectedForm.id) ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Loading analytics...</p>
+                </div>
+              ) : analytics.has(selectedForm.id) ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                        {analytics.get(selectedForm.id).summary.totalVisits > 0 
+                          ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
+                          : 0}%
+                      </p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).recentEvents?.length || 0}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Recent Events</p>
+                    </div>
                   </div>
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
-                  </div>
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
-                      {analytics.get(selectedForm.id).summary.totalVisits > 0 
-                        ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
-                        : 0}%
-                    </p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
-                  </div>
+                  
+                  {analytics.get(selectedForm.id).summary.totalVisits === 0 && (
+                    <div className={`text-center py-8 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <p className="text-sm">No analytics data yet. Share your form to start collecting data!</p>
+                      <p className="text-xs mt-2">Visit your form at: <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-xs">{window.location.origin}/{selectedForm.slug || selectedForm.id}</code></p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
