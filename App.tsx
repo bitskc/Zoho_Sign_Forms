@@ -813,9 +813,17 @@ const App: React.FC = () => {
     
     // Validate color contrast for accessibility (WCAG AA)
     // Check button text (white) against button background color
-    const contrastValidation = validateContrast('#FFFFFF', landingPrimaryColor, 'AA', true);
-    if (!contrastValidation.valid) {
-      setError(`Button color contrast issue: White text on your button color has insufficient contrast. ${contrastValidation.suggestion}`);
+    const buttonContrastValidation = validateContrast('#FFFFFF', landingPrimaryColor, 'AA', true);
+    if (!buttonContrastValidation.valid) {
+      setError(`Button color contrast issue: White text on your button color has insufficient contrast. ${buttonContrastValidation.suggestion}`);
+      setDetailsTab('landing');
+      return;
+    }
+    
+    // Validate page text (dark slate) against background color
+    const bgContrastValidation = validateContrast('#1E293B', landingBackgroundColor, 'AA', false);
+    if (!bgContrastValidation.valid) {
+      setError(`Background color contrast issue: Page text will be hard to read on this background. ${bgContrastValidation.suggestion}`);
       setDetailsTab('landing');
       return;
     }
@@ -1693,11 +1701,23 @@ const App: React.FC = () => {
                         <div className="flex gap-2">
                           <input id="landing-background-color-picker" type="color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            setContrastWarning(null);
+                            // Validate that page text (#1E293B) will be readable against the background
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
+                            if (!validation.valid) {
+                              setContrastWarning('Background contrast: ' + (validation.suggestion || ''));
+                            } else {
+                              setContrastWarning(null);
+                            }
                           }} aria-label="Background color picker" className="w-12 h-10 rounded cursor-pointer" />
                           <input id="landing-background-color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            setContrastWarning(null);
+                            // Validate that page text (#1E293B) will be readable against the background
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
+                            if (!validation.valid) {
+                              setContrastWarning('Background contrast: ' + (validation.suggestion || ''));
+                            } else {
+                              setContrastWarning(null);
+                            }
                           }} aria-label="Background color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
                         </div>
                       </div>
