@@ -812,9 +812,10 @@ const App: React.FC = () => {
     }
     
     // Validate color contrast for accessibility (WCAG AA)
-    const contrastValidation = validateContrast(landingPrimaryColor, landingBackgroundColor, 'AA', true);
+    // Check button text (white) against button background color
+    const contrastValidation = validateContrast('#FFFFFF', landingPrimaryColor, 'AA', true);
     if (!contrastValidation.valid) {
-      setError(`Color contrast issue: ${contrastValidation.suggestion}`);
+      setError(`Button color contrast issue: White text on your button color has insufficient contrast. ${contrastValidation.suggestion}`);
       setDetailsTab('landing');
       return;
     }
@@ -1665,22 +1666,22 @@ const App: React.FC = () => {
                     )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color</label>
+                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color (Button)</label>
                         <div className="flex gap-2">
                           <input id="landing-primary-color-picker" type="color" value={landingPrimaryColor} onChange={e => {
                             setLandingPrimaryColor(e.target.value);
-                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            const validation = validateContrast('#FFFFFF', e.target.value, 'AA', true);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Button contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
                           }} aria-label="Primary color picker" className="w-12 h-10 rounded cursor-pointer" />
                           <input id="landing-primary-color" value={landingPrimaryColor} onChange={e => {
                             setLandingPrimaryColor(e.target.value);
-                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            const validation = validateContrast('#FFFFFF', e.target.value, 'AA', true);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Button contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
@@ -1688,25 +1689,15 @@ const App: React.FC = () => {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label htmlFor="landing-background-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color</label>
+                        <label htmlFor="landing-background-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color (Page)</label>
                         <div className="flex gap-2">
                           <input id="landing-background-color-picker" type="color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
-                            if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
-                            } else {
-                              setContrastWarning(null);
-                            }
+                            setContrastWarning(null);
                           }} aria-label="Background color picker" className="w-12 h-10 rounded cursor-pointer" />
                           <input id="landing-background-color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
-                            if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
-                            } else {
-                              setContrastWarning(null);
-                            }
+                            setContrastWarning(null);
                           }} aria-label="Background color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
                         </div>
                       </div>
