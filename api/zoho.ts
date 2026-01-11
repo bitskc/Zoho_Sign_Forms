@@ -242,14 +242,9 @@ export default async function handler(req: Request) {
       const action = actions[0];
       
       if (action?.action_id && request?.request_id) {
-        console.log('=== EMBED TOKEN REQUEST ===');
-        console.log('Making embedtoken API call...');
         // Use PUBLIC_URL environment variable for security (prevents header-based attacks)
         const host = process.env.PUBLIC_URL || 'https://www.signflow.ink';
         const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
-        console.log('Embed URL:', embedUrl);
-        console.log('Host parameter:', host);
-        console.log('Access token present:', !!accessToken);
         
         try {
           const embedResponse = await fetch(embedUrl, {
@@ -261,48 +256,17 @@ export default async function handler(req: Request) {
             body: JSON.stringify({ host })
           });
           
-          console.log('Embed response status:', embedResponse.status);
-          console.log('Embed response ok:', embedResponse.ok);
-          
-          if (!embedResponse.ok) {
-            const embedErrorText = await embedResponse.text();
-            console.error('=== EMBED TOKEN FAILED ===');
-            console.error('Status:', embedResponse.status);
-            console.error('Error text:', embedErrorText);
-            console.error('This means user will receive EMAIL LINK instead of embedded signing');
-            console.error('=== END EMBED TOKEN ERROR ===');
-            // Don't fail the entire request - just log the error and continue
-            // User will receive email link instead of embedded signing
-          } else {
+          if (embedResponse.ok) {
             const embedData = await embedResponse.json();
-            console.log('=== EMBED TOKEN SUCCESS ===');
-            console.log('Embed response data:', JSON.stringify(embedData));
             
             // Update the action with the embed signing URL if available
             if (embedData.sign_url) {
               action.signing_url = embedData.sign_url;
-              console.log('✓ Updated signing URL from embed token:', embedData.sign_url);
-              console.log('=== END EMBED TOKEN SUCCESS ===');
-            } else {
-              console.warn('=== EMBED TOKEN MISSING SIGN_URL ===');
-              console.warn('Response data:', JSON.stringify(embedData));
-              console.warn('User will receive email link instead');
-              console.warn('=== END EMBED TOKEN WARNING ===');
             }
           }
         } catch (embedError) {
-          console.error('=== EMBED TOKEN EXCEPTION ===');
-          console.error('Error:', embedError);
-          console.error('Error message:', (embedError as Error).message);
-          console.error('Error stack:', (embedError as Error).stack);
-          console.error('User will receive email link instead');
-          console.error('=== END EMBED TOKEN EXCEPTION ===');
+          // Silently continue - user will receive email link instead
         }
-      } else {
-        console.warn('=== MISSING IDs FOR EMBED TOKEN ===');
-        console.warn('action_id:', action?.action_id);
-        console.warn('request_id:', request?.request_id);
-        console.warn('=== END MISSING IDs ===');
       }
     }
 

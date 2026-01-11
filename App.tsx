@@ -868,8 +868,6 @@ const App: React.FC = () => {
       } : undefined
     };
     
-    console.log('Saving form:', formDef);
-    
     const res = await fetch('/api/forms', {
       method: 'POST',
       headers: {
@@ -881,7 +879,6 @@ const App: React.FC = () => {
     
     if (!res.ok) {
       const msg = await res.text();
-      console.error('Save form error:', res.status, msg);
       if (res.status === 404) {
         setError('Forms API not implemented yet. Please contact administrator.');
       } else {
@@ -974,43 +971,26 @@ const App: React.FC = () => {
     // Track submit_start event
     trackAnalytics(currentForm.id, 'submit_start', { name: signer.name, email: signer.email });
     
-    console.log('=== SUBMISSION START ===');
-    console.log('Current form:', currentForm);
-    console.log('Signer data:', signer);
-    
     const res = await triggerZohoSignTemplate(currentForm, signer, false, {
       userId: currentForm.userId
     });
-    
-    console.log('=== API RESPONSE ===');
-    console.log('Full response:', JSON.stringify(res, null, 2));
-    console.log('Success:', res.success);
-    console.log('Request ID:', res.requestId);
-    console.log('Signing URL:', res.signingUrl);
-    console.log('=== END RESPONSE ===');
     
     if (res.success) {
       // Track successful submission
       trackAnalytics(currentForm.id, 'submit_success', { name: signer.name, email: signer.email });
       
       if (res.signingUrl) {
-        console.log('=== REDIRECTING TO ZOHO SIGN ===');
-        console.log('Redirecting to:', res.signingUrl);
         // Redirect user directly to the Zoho Sign form
         window.location.href = res.signingUrl;
         return; // Don't set loading to false, page is redirecting
       } else {
-        console.warn('=== WARNING: NO SIGNING URL RETURNED ===');
-        console.warn('This means the embed token API call may have failed.');
-        console.warn('User will receive email link instead of direct redirect.');
+        // Embed token not available, user will receive email link
         setSuccessData({ requestId: res.requestId!, signingUrl: undefined });
       }
     } else {
       // Track failed submission
       trackAnalytics(currentForm.id, 'submit_error', { name: signer.name, email: signer.email, error: res.error });
       
-      console.log('=== SUBMISSION FAILED ===');
-      console.log('Error:', res.error);
       setError(res.error || "Submission failed. Please try again.");
     }
     setLoading(false);
