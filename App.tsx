@@ -812,9 +812,18 @@ const App: React.FC = () => {
     }
     
     // Validate color contrast for accessibility (WCAG AA)
-    const contrastValidation = validateContrast(landingPrimaryColor, landingBackgroundColor, 'AA', true);
-    if (!contrastValidation.valid) {
-      setError(`Color contrast issue: ${contrastValidation.suggestion}`);
+    // Check button text (white) against button background color
+    const buttonContrastValidation = validateContrast('#FFFFFF', landingPrimaryColor, 'AA', true);
+    if (!buttonContrastValidation.valid) {
+      setError(`Button color contrast issue: White text on your button color has insufficient contrast. ${buttonContrastValidation.suggestion}`);
+      setDetailsTab('landing');
+      return;
+    }
+    
+    // Validate page text (dark slate) against background color
+    const bgContrastValidation = validateContrast('#1E293B', landingBackgroundColor, 'AA', false);
+    if (!bgContrastValidation.valid) {
+      setError(`Background color contrast issue: Page text will be hard to read on this background. ${bgContrastValidation.suggestion}`);
       setDetailsTab('landing');
       return;
     }
@@ -1665,22 +1674,22 @@ const App: React.FC = () => {
                     )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color</label>
+                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color (Button)</label>
                         <div className="flex gap-2">
                           <input id="landing-primary-color-picker" type="color" value={landingPrimaryColor} onChange={e => {
                             setLandingPrimaryColor(e.target.value);
-                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            const validation = validateContrast('#FFFFFF', e.target.value, 'AA', true);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Button contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
                           }} aria-label="Primary color picker" className="w-12 h-10 rounded cursor-pointer" />
                           <input id="landing-primary-color" value={landingPrimaryColor} onChange={e => {
                             setLandingPrimaryColor(e.target.value);
-                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            const validation = validateContrast('#FFFFFF', e.target.value, 'AA', true);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Button contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
@@ -1688,22 +1697,24 @@ const App: React.FC = () => {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label htmlFor="landing-background-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color</label>
+                        <label htmlFor="landing-background-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color (Page)</label>
                         <div className="flex gap-2">
                           <input id="landing-background-color-picker" type="color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
+                            // Validate that page text (#1E293B) will be readable against the background
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Background contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
                           }} aria-label="Background color picker" className="w-12 h-10 rounded cursor-pointer" />
                           <input id="landing-background-color" value={landingBackgroundColor} onChange={e => {
                             setLandingBackgroundColor(e.target.value);
-                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
+                            // Validate that page text (#1E293B) will be readable against the background
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
                             if (!validation.valid) {
-                              setContrastWarning(validation.suggestion || '');
+                              setContrastWarning('Background contrast: ' + (validation.suggestion || ''));
                             } else {
                               setContrastWarning(null);
                             }
