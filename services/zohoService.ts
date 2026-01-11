@@ -66,14 +66,6 @@ export const triggerZohoSignTemplate = async (
     const actions = request?.actions || [];
     const action = actions[0];
     
-    console.log('=== ZOHO SERVICE DEBUG ===');
-    console.log('Raw data:', JSON.stringify(data, null, 2));
-    console.log('Request:', request);
-    console.log('Actions:', actions);
-    console.log('First action:', action);
-    console.log('Signing URL from action:', action?.signing_url);
-    console.log('=== END ZOHO SERVICE DEBUG ===');
-    
     return { 
       success: true, 
       requestId: request?.request_id,

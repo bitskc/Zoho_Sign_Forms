@@ -6,6 +6,8 @@ import QRCodeModal from './components/QRCodeModal';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 import { getRouteContext, buildFormUrl } from './services/routingService';
+import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace } from './utils/accessibility';
+
 
 // Reserved slugs that cannot be used for forms
 const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico'];
@@ -151,10 +153,17 @@ const App: React.FC = () => {
   const [landingFooterText, setLandingFooterText] = useState('');
   const [landingShowPoweredBy, setLandingShowPoweredBy] = useState(true);
   
+  // Accessibility state
+  const [landingLogoAlt, setLandingLogoAlt] = useState('');
+  const [contrastWarning, setContrastWarning] = useState<string | null>(null);
+  const [altTextError, setAltTextError] = useState<string | null>(null);
+  
   // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
   const [analytics, setAnalytics] = useState<Map<string, any>>(new Map());
   const [loadingQR, setLoadingQR] = useState<Set<string>>(new Set());
+  const [loadingAnalytics, setLoadingAnalytics] = useState<Set<string>>(new Set());
+  const [analyticsTimeWindow, setAnalyticsTimeWindow] = useState<'day' | 'week' | 'month' | 'all'>('week');
 
   
   // Debounce flags to prevent infinite retry loops
@@ -167,6 +176,48 @@ const App: React.FC = () => {
   const lastFetchedSlugRef = useRef<string | null>(null);
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
   const qrBatchProcessingRef = useRef(false);
+
+  // Fetch analytics for a form
+  const fetchAnalytics = async (formId: string, window: string = analyticsTimeWindow) => {
+    if (!sessionToken) return;
+    
+    // Prevent duplicate requests
+    if (loadingAnalytics.has(formId)) return;
+    
+    setLoadingAnalytics(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch(`/api/analytics?formId=${formId}&window=${window}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(prev => new Map(prev).set(formId, data));
+      } else if (res.status === 404) {
+        // Form not found - set empty analytics
+        setAnalytics(prev => new Map(prev).set(formId, {
+          timeWindow: window,
+          summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
+          recentEvents: []
+        }));
+      }
+    } catch (e) {
+      console.error('Failed to fetch analytics:', e);
+      // Set empty analytics on error
+      setAnalytics(prev => new Map(prev).set(formId, {
+        timeWindow: window,
+        summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
+        recentEvents: []
+      }));
+    } finally {
+      setLoadingAnalytics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(formId);
+        return newSet;
+      });
+    }
+  };
 
   const fetchForms = async (token: string) => {
     if (formsFetchAttempted) {
@@ -188,6 +239,14 @@ const App: React.FC = () => {
       }
       const data = await res.json();
       setForms(data || []);
+      
+      // Auto-load analytics for all forms in the background
+      if (data && data.length > 0) {
+        for (const form of data) {
+          // Load analytics for each form (don't await to prevent blocking)
+          fetchAnalytics(form.id).catch(e => console.warn('Background analytics load failed for form', form.id, e));
+        }
+      }
       
       // Load existing QR codes and generate missing ones (with batching for performance)
       // Prevent concurrent batch processing
@@ -476,6 +535,7 @@ const App: React.FC = () => {
           setLandingHeadline(lc.headline || '');
           setLandingDescription(lc.description || '');
           setLandingLogoUrl(lc.logoUrl || '');
+          setLandingLogoAlt(lc.logoAlt || '');
           setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
           setLandingButtonText(lc.buttonText || 'Sign Now');
           setLandingCompanyName(lc.contact?.companyName || '');
@@ -658,6 +718,22 @@ const App: React.FC = () => {
     setApiDomain('https://sign.zoho.com');
     setSlug('');
     setError(null);
+    // Clear landing page customization fields
+    setLandingHeadline('');
+    setLandingDescription('');
+    setLandingLogoUrl('');
+    setLandingLogoAlt('');
+    setLandingPrimaryColor('#3B82F6');
+    setLandingBackgroundColor('#F8FAFC');
+    setLandingButtonText('Sign Now');
+    setLandingCompanyName('');
+    setLandingContactEmail('');
+    setLandingContactPhone('');
+    setLandingFooterText('');
+    setLandingShowPoweredBy(true);
+    // Clear accessibility errors
+    setContrastWarning(null);
+    setAltTextError(null);
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -688,6 +764,7 @@ const App: React.FC = () => {
     setLandingHeadline(lc.headline || '');
     setLandingDescription(lc.description || '');
     setLandingLogoUrl(lc.logoUrl || '');
+    setLandingLogoAlt(lc.logoAlt || '');
     setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
     setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
     setLandingButtonText(lc.buttonText || 'Sign Now');
@@ -716,6 +793,30 @@ const App: React.FC = () => {
     
     if (loading) {
       return; // Prevent multiple submissions
+    }
+    
+    // Validate accessibility requirements
+    if (landingLogoUrl && !landingLogoAlt) {
+      setError('Please provide descriptive alt text for your logo (required for accessibility)');
+      setDetailsTab('landing');
+      return;
+    }
+    
+    if (landingLogoAlt) {
+      const altValidation = validateAltText(landingLogoAlt);
+      if (!altValidation.valid) {
+        setError(`Logo alt text issue: ${altValidation.errors[0]}`);
+        setDetailsTab('landing');
+        return;
+      }
+    }
+    
+    // Validate color contrast for accessibility (WCAG AA)
+    const contrastValidation = validateContrast(landingPrimaryColor, landingBackgroundColor, 'AA', true);
+    if (!contrastValidation.valid) {
+      setError(`Color contrast issue: ${contrastValidation.suggestion}`);
+      setDetailsTab('landing');
+      return;
     }
     
     setLoading(true);
@@ -747,10 +848,11 @@ const App: React.FC = () => {
       accessToken: sessionToken, // Required by database
       createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now(),
       // Include landing config if any values are set
-      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
+      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
         headline: landingHeadline || undefined,
         description: landingDescription || undefined,
         logoUrl: landingLogoUrl || undefined,
+        logoAlt: landingLogoAlt || undefined,
         theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC') ? {
           primaryColor: landingPrimaryColor !== '#3B82F6' ? landingPrimaryColor : undefined,
           backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined
@@ -766,8 +868,6 @@ const App: React.FC = () => {
       } : undefined
     };
     
-    console.log('Saving form:', formDef);
-    
     const res = await fetch('/api/forms', {
       method: 'POST',
       headers: {
@@ -779,7 +879,6 @@ const App: React.FC = () => {
     
     if (!res.ok) {
       const msg = await res.text();
-      console.error('Save form error:', res.status, msg);
       if (res.status === 404) {
         setError('Forms API not implemented yet. Please contact administrator.');
       } else {
@@ -791,8 +890,46 @@ const App: React.FC = () => {
     const saved = await res.json();
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
-    clearForm();
+
+    // Determine if we're currently viewing this form's details
+    const isViewingSavedForm = selectedFormId === (editingId || saved.id);
+
+    // If we're viewing this form's details, update currentForm and the editor state
+    if (isViewingSavedForm) {
+      setCurrentForm(saved);
+      const lc = saved.landingConfig || {};
+
+      // Ensure editor stays bound to the saved form and reflect latest values
+      setEditingId(saved.id);
+      setFormName(saved.name || '');
+      setTemplateId(saved.templateId || '');
+      setRoleName(saved.roleName || 'Signer 1');
+      setApiDomain(saved.apiDomain || 'https://sign.zoho.com');
+      setSlug(saved.slug || '');
+
+      setLandingHeadline(lc.headline || '');
+      setLandingDescription(lc.description || '');
+      setLandingLogoUrl(lc.logoUrl || '');
+      setLandingLogoAlt(lc.logoAlt || '');
+      setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+      setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
+      setLandingButtonText(lc.buttonText || 'Sign Now');
+      setLandingCompanyName(lc.contact?.companyName || '');
+      setLandingContactEmail(lc.contact?.email || '');
+      setLandingContactPhone(lc.contact?.phone || '');
+      setLandingFooterText(lc.footerText || '');
+      setLandingShowPoweredBy(lc.showPoweredBy !== false);
+    } else {
+      // Not viewing the saved form's details in-place — clear the editor for a fresh state
+      clearForm();
+    }
+
     setLoading(false);
+
+    // Only adjust the details tab if we're on this form's details view
+    if (isViewingSavedForm) {
+      setDetailsTab('landing'); // Stay on landing tab after save
+    }
   };
 
   const deleteForm = async (id: string) => {
@@ -834,43 +971,26 @@ const App: React.FC = () => {
     // Track submit_start event
     trackAnalytics(currentForm.id, 'submit_start', { name: signer.name, email: signer.email });
     
-    console.log('=== SUBMISSION START ===');
-    console.log('Current form:', currentForm);
-    console.log('Signer data:', signer);
-    
     const res = await triggerZohoSignTemplate(currentForm, signer, false, {
       userId: currentForm.userId
     });
-    
-    console.log('=== API RESPONSE ===');
-    console.log('Full response:', JSON.stringify(res, null, 2));
-    console.log('Success:', res.success);
-    console.log('Request ID:', res.requestId);
-    console.log('Signing URL:', res.signingUrl);
-    console.log('=== END RESPONSE ===');
     
     if (res.success) {
       // Track successful submission
       trackAnalytics(currentForm.id, 'submit_success', { name: signer.name, email: signer.email });
       
       if (res.signingUrl) {
-        console.log('=== REDIRECTING TO ZOHO SIGN ===');
-        console.log('Redirecting to:', res.signingUrl);
         // Redirect user directly to the Zoho Sign form
         window.location.href = res.signingUrl;
         return; // Don't set loading to false, page is redirecting
       } else {
-        console.warn('=== WARNING: NO SIGNING URL RETURNED ===');
-        console.warn('This means the embed token API call may have failed.');
-        console.warn('User will receive email link instead of direct redirect.');
+        // Embed token not available, user will receive email link
         setSuccessData({ requestId: res.requestId!, signingUrl: undefined });
       }
     } else {
       // Track failed submission
       trackAnalytics(currentForm.id, 'submit_error', { name: signer.name, email: signer.email, error: res.error });
       
-      console.log('=== SUBMISSION FAILED ===');
-      console.log('Error:', res.error);
       setError(res.error || "Submission failed. Please try again.");
     }
     setLoading(false);
@@ -1010,24 +1130,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Fetch analytics for a form
-  const fetchAnalytics = async (formId: string) => {
-    if (!sessionToken) return;
-    
-    try {
-      const res = await fetch(`/api/analytics?formId=${formId}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setAnalytics(prev => new Map(prev).set(formId, data));
-      }
-    } catch (e) {
-      console.error('Failed to fetch analytics:', e);
-    }
-  };
-
 
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
@@ -1055,6 +1157,18 @@ const App: React.FC = () => {
       }
     }
   }, [view, currentForm?.id]);
+
+  // Auto-load analytics when admin dashboard is accessed
+  useEffect(() => {
+    if (view === ViewMode.ADMIN_DASHBOARD && sessionToken && forms.length > 0) {
+      // Load analytics for all forms if not already loaded
+      for (const form of forms) {
+        if (!analytics.has(form.id)) {
+          fetchAnalytics(form.id).catch(e => console.warn('Analytics auto-load failed for form', form.id, e));
+        }
+      }
+    }
+  }, [view, sessionToken, forms, analytics]);
 
 
   return (
@@ -1498,25 +1612,110 @@ const App: React.FC = () => {
                   <h3 className={`text-sm font-semibold mb-4 ${darkMode ? 'text-slate-200' : 'text-slate-700'}`}>Branding</h3>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Logo URL</label>
-                      <input value={landingLogoUrl} onChange={e => setLandingLogoUrl(e.target.value)} placeholder="https://yoursite.com/logo.png" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                      <label htmlFor="landing-logo-url" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Logo URL</label>
+                      <input 
+                        id="landing-logo-url"
+                        aria-label="Logo URL for landing page"
+                        aria-describedby="logo-url-help"
+                        value={landingLogoUrl} 
+                        onChange={e => setLandingLogoUrl(e.target.value)} 
+                        onBlur={e => {
+                          const url = e.target.value.trim();
+                          if (url && !url.startsWith('https://')) {
+                            setError('Logo URL must use HTTPS for security (e.g., https://example.com/logo.png)');
+                          } else {
+                            setError(null);
+                          }
+                        }}
+                        placeholder="https://yoursite.com/logo.png" 
+                        className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} 
+                      />
+                      {landingLogoUrl && !landingLogoUrl.startsWith('https://') && (
+                        <p id="logo-url-help" className="text-xs text-red-500" role="alert">⚠️ Must use HTTPS</p>
+                      )}
                     </div>
+                    {landingLogoUrl && (
+                      <div className="space-y-2">
+                        <label htmlFor="landing-logo-alt" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                          Logo Alt Text <span className="text-red-500" aria-label="required">*</span>
+                        </label>
+                        <input 
+                          id="landing-logo-alt"
+                          aria-label="Descriptive alt text for logo image"
+                          aria-describedby="alt-text-help"
+                          aria-required="true"
+                          value={landingLogoAlt} 
+                          onChange={e => {
+                            setLandingLogoAlt(e.target.value);
+                            const validation = validateAltText(e.target.value);
+                            if (!validation.valid) {
+                              setAltTextError(validation.errors[0]);
+                            } else {
+                              setAltTextError(null);
+                            }
+                          }}
+                          placeholder="e.g., ACME Corporation logo" 
+                          className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${altTextError ? 'border-red-500' : ''} ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} 
+                        />
+                        <p id="alt-text-help" className="text-xs text-slate-500">Describe your logo for screen readers (5-125 characters)</p>
+                        {altTextError && (
+                          <p className="text-xs text-red-500" role="alert">⚠️ {altTextError}</p>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color</label>
+                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color</label>
                         <div className="flex gap-2">
-                          <input type="color" value={landingPrimaryColor} onChange={e => setLandingPrimaryColor(e.target.value)} className="w-12 h-10 rounded cursor-pointer" />
-                          <input value={landingPrimaryColor} onChange={e => setLandingPrimaryColor(e.target.value)} className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
+                          <input id="landing-primary-color-picker" type="color" value={landingPrimaryColor} onChange={e => {
+                            setLandingPrimaryColor(e.target.value);
+                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            if (!validation.valid) {
+                              setContrastWarning(validation.suggestion || '');
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Primary color picker" className="w-12 h-10 rounded cursor-pointer" />
+                          <input id="landing-primary-color" value={landingPrimaryColor} onChange={e => {
+                            setLandingPrimaryColor(e.target.value);
+                            const validation = validateContrast(e.target.value, landingBackgroundColor, 'AA', true);
+                            if (!validation.valid) {
+                              setContrastWarning(validation.suggestion || '');
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Primary color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color</label>
+                        <label htmlFor="landing-background-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Background Color</label>
                         <div className="flex gap-2">
-                          <input type="color" value={landingBackgroundColor} onChange={e => setLandingBackgroundColor(e.target.value)} className="w-12 h-10 rounded cursor-pointer" />
-                          <input value={landingBackgroundColor} onChange={e => setLandingBackgroundColor(e.target.value)} className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
+                          <input id="landing-background-color-picker" type="color" value={landingBackgroundColor} onChange={e => {
+                            setLandingBackgroundColor(e.target.value);
+                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
+                            if (!validation.valid) {
+                              setContrastWarning(validation.suggestion || '');
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Background color picker" className="w-12 h-10 rounded cursor-pointer" />
+                          <input id="landing-background-color" value={landingBackgroundColor} onChange={e => {
+                            setLandingBackgroundColor(e.target.value);
+                            const validation = validateContrast(landingPrimaryColor, e.target.value, 'AA', true);
+                            if (!validation.valid) {
+                              setContrastWarning(validation.suggestion || '');
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Background color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
                         </div>
                       </div>
                     </div>
+                    {contrastWarning && (
+                      <div className="p-3 text-xs rounded-lg" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)' }} role="alert">
+                        ⚠️ {contrastWarning}
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Button Text</label>
                       <input value={landingButtonText} onChange={e => setLandingButtonText(e.target.value)} placeholder="Sign Now" className={`w-full px-4 py-3 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
@@ -1637,34 +1836,70 @@ const App: React.FC = () => {
                   <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Analytics</h2>
                   <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Track form visits and submissions</p>
                 </div>
-                {analytics.has(selectedForm.id) && (
-                  <button 
-                    onClick={() => fetchAnalytics(selectedForm.id)}
-                    className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm"
+                <div className="flex items-center gap-3">
+                  <select
+                    value={analyticsTimeWindow}
+                    onChange={(e) => {
+                      const newWindow = e.target.value as 'day' | 'week' | 'month' | 'all';
+                      setAnalyticsTimeWindow(newWindow);
+                      if (analytics.has(selectedForm.id)) {
+                        fetchAnalytics(selectedForm.id, newWindow);
+                      }
+                    }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-200 text-slate-700'} border focus:outline-none focus:ring-2 focus:ring-blue-500`}
                   >
-                    Refresh
-                  </button>
-                )}
+                    <option value="day">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Time</option>
+                  </select>
+                  {analytics.has(selectedForm.id) && (
+                    <button 
+                      onClick={() => fetchAnalytics(selectedForm.id)}
+                      className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm"
+                    >
+                      Refresh
+                    </button>
+                  )}
+                </div>
               </div>
               
-              {analytics.has(selectedForm.id) ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
+              {loadingAnalytics.has(selectedForm.id) ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Loading analytics...</p>
+                </div>
+              ) : analytics.has(selectedForm.id) ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                        {analytics.get(selectedForm.id).summary.totalVisits > 0 
+                          ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
+                          : 0}%
+                      </p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
+                    </div>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).recentEvents?.length || 0}</p>
+                      <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Recent Events</p>
+                    </div>
                   </div>
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
-                  </div>
-                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                    <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
-                      {analytics.get(selectedForm.id).summary.totalVisits > 0 
-                        ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
-                        : 0}%
-                    </p>
-                    <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
-                  </div>
+                  
+                  {analytics.get(selectedForm.id).summary.totalVisits === 0 && (
+                    <div className={`text-center py-8 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <p className="text-sm">No analytics data yet. Share your form to start collecting data!</p>
+                      <p className="text-xs mt-2">Visit your form at: <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-xs">{window.location.origin}/{selectedForm.slug || selectedForm.id}</code></p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -1889,9 +2124,6 @@ const App: React.FC = () => {
               <p className="opacity-60">Powered by <a href="https://signflow.ink" className="hover:underline">SignFlow</a></p>
             )}
           </div>
-          
-          {/* Custom CSS injection */}
-          {lc.customCss && <style dangerouslySetInnerHTML={{ __html: lc.customCss }} />}
         </div>
         );
       })()}
