@@ -42,8 +42,11 @@ export interface FormDefinition {
   apiDomain: string;
   accessToken?: string; // deprecated; kept for backward compatibility
   createdAt?: number | null;
-  qrStableId?: string; // Permanent QR code identifier
+  qrStableId?: string; // Permanent QR code identifier used by the app (preferred field)
   landingConfig?: LandingConfig; // Landing page customization
+  qrCodeData?: string; // URL to QR code image (e.g., https://api.qrserver.com/...)
+  qrStableIdFromDb?: string; // Raw stable ID loaded from the database (used for sync/migrations)
+  qrCreatedAt?: string; // QR code creation timestamp
 }
 
 export interface UserCredentials {
@@ -94,7 +97,7 @@ export enum ViewMode {
 export interface QRCode {
   id: string;
   formId: string;
-  qrCodeData: string; // Base64 encoded QR code image
+  qrCodeData: string; // URL to QR code image (e.g., https://api.qrserver.com/...)
   stableId: string; // Permanent identifier (e.g., 'qr-abc123')
   createdAt: string;
   updatedAt: string;
