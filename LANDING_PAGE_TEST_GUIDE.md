@@ -111,7 +111,7 @@
    - **Solution**: Check `api/forms.ts` line 81-88 includes `landing_config` in SELECT
    
 3. **Data not being saved**: Form submission not saving `landingConfig` object to database
-   - **Solution**: Check `saveForm()` function at line 750, verify `landingConfig` object is being built correctly
+   - **Solution**: Check `saveForm()` function in `App.tsx` (lines 777-872), verify `landingConfig` object is being built correctly
 
 4. **Caching issue**: Browser or Cloudflare cache returning old data
    - **Solution**: Incognito/private window or add `?v=` query parameter
@@ -119,7 +119,7 @@
 ### Issue: Only some fields work, others don't
 
 **Check these specific fields**:
-- **Headline/Description**: Loaded from `lc.headline` at line 1845, rendered at line 1865
+- **Headline/Description**: Loaded from `lc.headline` at line 1897, rendered at line 1913
 - **Colors**: Loaded from `lc.theme` at line 1847-1850, used inline via `style={{backgroundColor}}`
 - **Footer**: Loaded from `lc.footerText` at line 1942
 - **Contact Info**: Loaded from `lc.contact` at line 1931-1936
@@ -134,9 +134,9 @@
 
 ## Code Locations Reference
 
-**Admin Form Inputs**: App.tsx lines 1530-1640 (Landing tab)
+**Admin Form Inputs**: App.tsx lines 1563-1684 (Landing tab)
 **Save Function**: App.tsx lines 719-805 (saveForm)
-**Load Function**: App.tsx lines 688-705 (openFormDetails)
+**Load Function**: App.tsx lines 733-780 (openFormDetails)
 **Public Form Rendering**: App.tsx lines 1834-1950 (PUBLIC_FORM view)
 **API Endpoint**: api/forms.ts lines 68-109 (GET with slug)
 **Database Column**: supabase/migrations/20260110_landing_page_customization.sql

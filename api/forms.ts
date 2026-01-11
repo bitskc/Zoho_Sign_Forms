@@ -86,7 +86,7 @@ export default async function handler(req: Request) {
         const result = await supabaseServer
           .from(table)
           .select(`
-            id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at,landing_config,
+            id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,
             form_qrcodes(qr_code_data, stable_id, created_at)
           `)
           .eq('slug', slug)
@@ -98,7 +98,7 @@ export default async function handler(req: Request) {
         if (error?.message?.includes('landing_config') || error?.message?.includes('form_qrcodes')) {
           const fallbackResult = await supabaseServer
             .from(table)
-            .select('id,user_id,name,slug,template_id,role_name,api_domain,access_token,qr_stable_id,created_at')
+            .select('id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at')
             .eq('slug', slug)
             .maybeSingle();
           data = fallbackResult.data;

@@ -35,9 +35,9 @@ The landing page customization system is fully implemented in the codebase with 
 ### 4. Data Flow: Save Process
 
 ```
-User edits form → fillls Landing tab inputs → clicks "Save Landing Page"
+User edits form → fills Landing tab inputs → clicks \"Save Landing Page\"
   ↓
-saveForm() function (line 719)
+saveForm() function (line 777)
   ↓
 Creates FormDefinition with landingConfig object (camelCase)
   ↓
@@ -58,7 +58,7 @@ clearForm() resets all fields with proper defaults
 
 #### For Admin (Viewing Form Details):
 ```
-openFormDetails() called (line 688)
+openFormDetails() called (line 733)
   ↓
 Sets all local state variables from form.landingConfig
   ↓
@@ -71,7 +71,7 @@ Landing tab displays current values
 ```
 User visits /form-slug URL
   ↓
-fetchFormBySlug() called (line 279)
+fetchFormBySlug() called (line 323)
   ↓
 GET /api/forms?slug=form-slug
   ↓
@@ -200,7 +200,7 @@ All customization fields are rendered:
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| App.tsx | State management, UI, rendering | 142-152, 662-681, 688-705, 719-822, 1519-1640, 1844-1950 |
+| App.tsx | State management, UI, rendering | 142-152, 706-725, 733-780, 777-872, 1563-1684, 1896-2002 |
 | api/forms.ts | API endpoints, database conversion | 15-46, 81-88, 167-198, 213-216 |
 | types.ts | TypeScript interfaces | LandingConfig, FormDefinition |
 | supabase/migrations/20260110_landing_page_customization.sql | Database schema | N/A |

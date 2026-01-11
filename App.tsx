@@ -177,6 +177,48 @@ const App: React.FC = () => {
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
   const qrBatchProcessingRef = useRef(false);
 
+  // Fetch analytics for a form
+  const fetchAnalytics = async (formId: string, window: string = analyticsTimeWindow) => {
+    if (!sessionToken) return;
+    
+    // Prevent duplicate requests
+    if (loadingAnalytics.has(formId)) return;
+    
+    setLoadingAnalytics(prev => new Set(prev).add(formId));
+    
+    try {
+      const res = await fetch(`/api/analytics?formId=${formId}&window=${window}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(prev => new Map(prev).set(formId, data));
+      } else if (res.status === 404) {
+        // Form not found - set empty analytics
+        setAnalytics(prev => new Map(prev).set(formId, {
+          timeWindow: window,
+          summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
+          recentEvents: []
+        }));
+      }
+    } catch (e) {
+      console.error('Failed to fetch analytics:', e);
+      // Set empty analytics on error
+      setAnalytics(prev => new Map(prev).set(formId, {
+        timeWindow: window,
+        summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
+        recentEvents: []
+      }));
+    } finally {
+      setLoadingAnalytics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(formId);
+        return newSet;
+      });
+    }
+  };
+
   const fetchForms = async (token: string) => {
     if (formsFetchAttempted) {
       return;
@@ -852,14 +894,21 @@ const App: React.FC = () => {
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
     
+    // Determine if we're currently viewing this form's details
+    const isViewingSavedForm = selectedFormId === (editingId || saved.id);
+    
     // If we're viewing this form's details, also update currentForm with the latest data
-    if (selectedFormId === (editingId || saved.id)) {
+    if (isViewingSavedForm) {
       setCurrentForm(saved);
     }
     
     clearForm();
     setLoading(false);
-    setDetailsTab('landing'); // Stay on landing tab after save
+    
+    // Only adjust the details tab if we're on this form's details view
+    if (isViewingSavedForm) {
+      setDetailsTab('landing'); // Stay on landing tab after save
+    }
   };
 
   const deleteForm = async (id: string) => {
@@ -1077,48 +1126,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Fetch analytics for a form
-  const fetchAnalytics = async (formId: string, window: string = analyticsTimeWindow) => {
-    if (!sessionToken) return;
-    
-    // Prevent duplicate requests
-    if (loadingAnalytics.has(formId)) return;
-    
-    setLoadingAnalytics(prev => new Set(prev).add(formId));
-    
-    try {
-      const res = await fetch(`/api/analytics?formId=${formId}&window=${window}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setAnalytics(prev => new Map(prev).set(formId, data));
-      } else if (res.status === 404) {
-        // Form not found - set empty analytics
-        setAnalytics(prev => new Map(prev).set(formId, {
-          timeWindow: window,
-          summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
-          recentEvents: []
-        }));
-      }
-    } catch (e) {
-      console.error('Failed to fetch analytics:', e);
-      // Set empty analytics on error
-      setAnalytics(prev => new Map(prev).set(formId, {
-        timeWindow: window,
-        summary: { totalVisits: 0, totalSubmissions: 0, conversionRate: 0 },
-        recentEvents: []
-      }));
-    } finally {
-      setLoadingAnalytics(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(formId);
-        return newSet;
-      });
-    }
-  };
-
 
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
@@ -1157,7 +1164,7 @@ const App: React.FC = () => {
         }
       }
     }
-  }, [view, sessionToken, forms.length]);
+  }, [view, sessionToken, forms, analytics]);
 
 
   return (
