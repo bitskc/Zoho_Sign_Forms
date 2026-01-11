@@ -893,18 +893,42 @@ const App: React.FC = () => {
     const saved = await res.json();
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
-    
+
     // Determine if we're currently viewing this form's details
     const isViewingSavedForm = selectedFormId === (editingId || saved.id);
-    
-    // If we're viewing this form's details, also update currentForm with the latest data
+
+    // If we're viewing this form's details, update currentForm and the editor state
     if (isViewingSavedForm) {
       setCurrentForm(saved);
+      const lc = saved.landingConfig || {};
+
+      // Ensure editor stays bound to the saved form and reflect latest values
+      setEditingId(saved.id);
+      setFormName(saved.name || '');
+      setTemplateId(saved.templateId || '');
+      setRoleName(saved.roleName || 'Signer 1');
+      setApiDomain(saved.apiDomain || 'https://sign.zoho.com');
+      setSlug(saved.slug || '');
+
+      setLandingHeadline(lc.headline || '');
+      setLandingDescription(lc.description || '');
+      setLandingLogoUrl(lc.logoUrl || '');
+      setLandingLogoAlt(lc.logoAlt || '');
+      setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+      setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
+      setLandingButtonText(lc.buttonText || 'Sign Now');
+      setLandingCompanyName(lc.contact?.companyName || '');
+      setLandingContactEmail(lc.contact?.email || '');
+      setLandingContactPhone(lc.contact?.phone || '');
+      setLandingFooterText(lc.footerText || '');
+      setLandingShowPoweredBy(lc.showPoweredBy !== false);
+    } else {
+      // Not viewing the saved form's details in-place — clear the editor for a fresh state
+      clearForm();
     }
-    
-    clearForm();
+
     setLoading(false);
-    
+
     // Only adjust the details tab if we're on this form's details view
     if (isViewingSavedForm) {
       setDetailsTab('landing'); // Stay on landing tab after save
