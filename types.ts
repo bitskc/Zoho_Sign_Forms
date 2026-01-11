@@ -28,7 +28,6 @@ export interface LandingConfig {
   contact?: LandingContact;
   footerText?: string;       // Custom footer text
   showPoweredBy?: boolean;   // Show "Powered by SignFlow" badge
-  customCss?: string;        // Advanced: custom CSS overrides
   buttonText?: string;       // Custom submit button text (default: "Sign Now")
 }
 

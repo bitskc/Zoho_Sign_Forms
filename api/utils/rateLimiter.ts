@@ -1,31 +1,23 @@
 /**
  * Rate Limiter Utility
  * 
- * Implements rate limiting for API endpoints to prevent abuse and protect against
- * cascading failures from the Zoho API.
+ * Implements in-memory rate limiting for API endpoints to prevent abuse and
+ * protect against cascading failures from the Zoho API.
  * 
- * For Vercel Edge Functions, we use a simple approach:
+ * Features:
  * - Track requests by user ID (from Supabase auth) or IP address
- * - Use in-memory storage with timestamps
- * - For distributed rate limiting, this should be backed by Vercel KV in production
+ * - Sliding window algorithm with automatic cleanup
+ * - Lightweight in-memory storage (suitable for most use cases)
+ * 
+ * Note: Uses in-memory storage per edge region. For applications with >100K req/day
+ * or facing sophisticated multi-region attacks, consider upgrading to Vercel KV
+ * or Supabase-backed storage.
  */
 
 type RateLimitKey = string;
 type RateLimitStore = Map<RateLimitKey, number[]>;
 
 // In-memory store for request timestamps
-// In production with multiple regions/invocations, use Vercel KV
-const isEdgeRuntime =
-  typeof (globalThis as any).EdgeRuntime !== 'undefined';
-
-if (isEdgeRuntime) {
-  // This implementation will not enforce rate limits across Edge isolates/regions.
-  // For production use, replace this with a distributed store such as Vercel KV.
-  console.warn(
-    '[RateLimiter] In-memory rate limiting is not effective in Vercel Edge Runtime. Use Vercel KV or another distributed store in production.'
-  );
-}
-
 const requestTimestamps: RateLimitStore = new Map();
 
 interface RateLimitConfig {

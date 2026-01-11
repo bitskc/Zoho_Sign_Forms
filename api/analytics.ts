@@ -89,8 +89,19 @@ export default async function handler(req: Request) {
     }
 
     const formId = url.searchParams.get('formId');
+    const timeWindow = url.searchParams.get('window') || 'all'; // 'day', 'week', 'month', 'all'
+    
     if (!formId) {
       return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+    }
+    
+    // Validate time window parameter
+    const validWindows = ['day', 'week', 'month', 'all'];
+    if (!validWindows.includes(timeWindow)) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid time window', 
+        details: 'Must be one of: day, week, month, all' 
+      }), { status: 400 });
     }
 
     // Verify the form belongs to the user
@@ -105,24 +116,35 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
     }
 
-    // Get analytics summary
-    const { data: allEvents, error: eventsError } = await supabaseServer
+    // Calculate time window boundaries in UTC
+    const now = new Date();
+    const startDate = getWindowStartDate(timeWindow, now);
+    
+    // Build query with time window filter
+    let query = supabaseServer
       .from('form_analytics')
       .select('*')
-      .eq('form_id', formId)
-      .order('created_at', { ascending: false });
+      .eq('form_id', formId);
+    
+    // Apply time filter if not 'all'
+    if (timeWindow !== 'all') {
+      query = query.gte('created_at', startDate.toISOString());
+    }
+    
+    query = query.order('created_at', { ascending: false });
+
+    const { data: allEvents, error: eventsError } = await query;
 
     if (eventsError) {
       return new Response(JSON.stringify({ error: eventsError.message }), { status: 400 });
     }
 
-    // Calculate summary statistics
+    // Calculate summary statistics with improved logic
     const events = allEvents || [];
     const visits = events.filter(e => e.event_type === 'visit').length;
-    const submissions = events.filter(e => 
-      e.event_type === 'submit_success' || e.event_type === 'submit_start'
-    ).length;
     const successfulSubmissions = events.filter(e => e.event_type === 'submit_success').length;
+    
+    // Conversion rate = successful submissions / visits (excluding submit_start)
     const conversionRate = visits > 0 ? (successfulSubmissions / visits) * 100 : 0;
 
     // Get recent events (last 20)
@@ -139,10 +161,12 @@ export default async function handler(req: Request) {
     }));
 
     return new Response(JSON.stringify({
+      timeWindow,
+      periodStart: timeWindow !== 'all' ? startDate.toISOString() : null,
+      periodEnd: now.toISOString(),
       summary: {
         totalVisits: visits,
-        totalSubmissions: submissions,
-        successfulSubmissions,
+        totalSubmissions: successfulSubmissions, // Only successful submissions
         conversionRate: Math.round(conversionRate * 100) / 100
       },
       recentEvents
@@ -150,4 +174,37 @@ export default async function handler(req: Request) {
   }
 
   return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+}
+
+/**
+ * Calculate the start date for a time window in UTC
+ * @param window - Time window: 'day', 'week', 'month', 'all'
+ * @param now - Current date/time
+ * @returns Start date for the window
+ */
+function getWindowStartDate(window: string, now: Date): Date {
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0); // Normalize to start of day in UTC
+  
+  switch (window) {
+    case 'day':
+      // Start of today in UTC
+      return start;
+    
+    case 'week':
+      // Start of week (Monday) in UTC
+      const dayOfWeek = start.getUTCDay();
+      const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday = 0, so go back 6 days
+      start.setUTCDate(start.getUTCDate() - daysToMonday);
+      return start;
+    
+    case 'month':
+      // Start of month in UTC
+      start.setUTCDate(1);
+      return start;
+    
+    default:
+      // For 'all', return a date far in the past
+      return new Date('2000-01-01T00:00:00Z');
+  }
 }

@@ -1,5 +1,6 @@
 import { supabaseServer } from './_supabaseServer.js';
 import { checkRateLimit, createRateLimitResponse, getRateLimitKey, RATE_LIMITS } from './utils/rateLimiter.js';
+import { validateUrl, getUrlValidationError } from './utils/urlValidator.js';
 
 export const config = { runtime: 'edge' };
 
@@ -41,7 +42,7 @@ function toCamel(record: any) {
       } : undefined,
       footerText: landingConfig.footer_text,
       showPoweredBy: landingConfig.show_powered_by,
-      customCss: landingConfig.custom_css,
+
       buttonText: landingConfig.button_text
     };
   }
@@ -164,6 +165,33 @@ export default async function handler(req: Request) {
 
     const body = await req.json();
     
+    // Validate URLs in landing config before saving
+    if (body.landingConfig) {
+      const lc = body.landingConfig;
+      
+      // Validate logo URL
+      if (lc.logoUrl && !validateUrl(lc.logoUrl)) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Invalid logo URL', 
+            details: getUrlValidationError(lc.logoUrl)
+          }), 
+          { status: 400 }
+        );
+      }
+      
+      // Validate contact website URL
+      if (lc.contact?.website && !validateUrl(lc.contact.website)) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Invalid website URL', 
+            details: getUrlValidationError(lc.contact.website)
+          }), 
+          { status: 400 }
+        );
+      }
+    }
+    
     // Convert camelCase landingConfig to snake_case for database
     let landingConfig = body.landingConfig;
     if (landingConfig && typeof landingConfig === 'object') {
@@ -190,7 +218,6 @@ export default async function handler(req: Request) {
         } : undefined,
         footer_text: landingConfig.footerText,
         show_powered_by: landingConfig.showPoweredBy,
-        custom_css: landingConfig.customCss,
         button_text: landingConfig.buttonText
       };
     }
