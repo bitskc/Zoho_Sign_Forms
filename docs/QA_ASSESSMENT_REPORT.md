@@ -82,7 +82,7 @@ Custom CSS is injected directly into the DOM without sanitization:
 - Add Content Security Policy (CSP) headers: `style-src 'self' 'unsafe-inline'` → `style-src 'self'`
 - Add server-side validation in [api/forms.ts](api/forms.ts#L193)
 
-**Status:** ❌ Not Fixed
+**Status:** ✅ Fixed
 
 ---
 
@@ -119,7 +119,7 @@ CREATE POLICY "Public read access by slug" ON forms
   FOR SELECT USING (true);
 ```
 
-**Status:** ❌ Not Fixed
+**Status:** ✅ Fixed
 
 ---
 

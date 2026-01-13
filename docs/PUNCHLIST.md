@@ -25,7 +25,7 @@ npm install @sentry/react @sentry/vite-plugin
 - [ ] Deploy and verify errors appear in Sentry dashboard
 
 **Files to modify:**
-- `main.tsx` or `App.tsx` - wrap with `Sentry.init()`
+- `index.tsx` or `App.tsx` - wrap with `Sentry.init()`
 - `vite.config.ts` - add Sentry plugin
 - Vercel dashboard - add SENTRY_DSN env var
 

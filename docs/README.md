@@ -213,7 +213,7 @@ Top priorities (Week 1-2):
 - [React 19 Documentation](https://react.dev/)
 
 ### Internal Resources
-- GitHub Repository: (Add your repo URL)
+- GitHub Repository: https://github.com/bitskc/Zoho_Sign_Forms
 - Vercel Dashboard: (Add your project URL)
 - Supabase Dashboard: (Add your project URL)
 
