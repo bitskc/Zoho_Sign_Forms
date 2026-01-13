@@ -6,7 +6,7 @@ import QRCodeModal from './components/QRCodeModal';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 import { getRouteContext, buildFormUrl } from './services/routingService';
-import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace } from './utils/accessibility';
+import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRelativeLuminance } from './utils/accessibility';
 
 
 // Reserved slugs that cannot be used for forms
@@ -868,7 +868,7 @@ const App: React.FC = () => {
       apiDomain: apiDomain.trim(),
       userId: userId || undefined,
       accessToken: sessionToken, // Required by database
-      createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now(),
+      createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now(),
       // Include landing config if any values are set
       landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
         headline: landingHeadline || undefined,
@@ -877,7 +877,7 @@ const App: React.FC = () => {
         logoAlt: landingLogoAlt || undefined,
         theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF') ? {
           primaryColor: landingPrimaryColor !== '#3B82F6' ? landingPrimaryColor : undefined,
-          backgroundColor: landingBackgroundColor,
+          backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined,
           cardColor: landingCardColor !== '#FFFFFF' ? landingCardColor : undefined
         } : undefined,
         buttonText: landingButtonText !== 'Sign Now' ? landingButtonText : undefined,
@@ -2078,14 +2078,8 @@ const App: React.FC = () => {
         
         // Calculate text color based on card background luminance for automatic contrast
         const getTextColorForBackground = (bgHex: string): { text: string, muted: string } => {
-          // Remove # and convert to RGB
-          const hex = bgHex.replace('#', '');
-          const r = parseInt(hex.substring(0, 2), 16);
-          const g = parseInt(hex.substring(2, 4), 16);
-          const b = parseInt(hex.substring(4, 6), 16);
-          
-          // Calculate relative luminance (WCAG formula)
-          const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          // Use WCAG 2.1 relative luminance calculation
+          const luminance = getRelativeLuminance(bgHex);
           
           // If background is dark (luminance < 0.5), use light text
           if (luminance < 0.5) {
