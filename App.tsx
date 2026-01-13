@@ -816,30 +816,8 @@ const App: React.FC = () => {
       }
     }
     
-    // Validate color contrast for accessibility (WCAG AA)
-    // Check button text (white) against button background color
-    const buttonContrastValidation = validateContrast('#FFFFFF', landingPrimaryColor, 'AA', true);
-    if (!buttonContrastValidation.valid) {
-      setError(`Button color contrast issue: White text on your button color has insufficient contrast. ${buttonContrastValidation.suggestion}`);
-      setDetailsTab('landing');
-      return;
-    }
-    
-    // Validate page text (dark slate) against background color
-    const bgContrastValidation = validateContrast('#1E293B', landingBackgroundColor, 'AA', false);
-    if (!bgContrastValidation.valid) {
-      setError(`Background color contrast issue: Page text will be hard to read on this background. ${bgContrastValidation.suggestion}`);
-      setDetailsTab('landing');
-      return;
-    }
-    
-    // Validate form text (dark slate) against card color
-    const cardContrastValidation = validateContrast('#1E293B', landingCardColor, 'AA', false);
-    if (!cardContrastValidation.valid) {
-      setError(`Card color contrast issue: Form text will be hard to read on this card color. ${cardContrastValidation.suggestion}`);
-      setDetailsTab('landing');
-      return;
-    }
+    // Note: Contrast warnings are shown in real-time in the UI
+    // We allow saving even with contrast issues, but users are warned during editing
     
     setLoading(true);
     
