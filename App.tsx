@@ -877,7 +877,7 @@ const App: React.FC = () => {
         logoAlt: landingLogoAlt || undefined,
         theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF') ? {
           primaryColor: landingPrimaryColor !== '#3B82F6' ? landingPrimaryColor : undefined,
-          backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined,
+          backgroundColor: landingBackgroundColor, // Always save to ensure it propagates
           cardColor: landingCardColor !== '#FFFFFF' ? landingCardColor : undefined
         } : undefined,
         buttonText: landingButtonText !== 'Sign Now' ? landingButtonText : undefined,
