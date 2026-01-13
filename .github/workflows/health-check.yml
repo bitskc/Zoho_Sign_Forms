@@ -1,0 +1,164 @@
+name: Production Health Check
+
+on:
+  # Run every 15 minutes
+  schedule:
+    - cron: '*/15 * * * *'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+  # Run after deployments complete
+  deployment_status:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    # Only run on successful deployments or scheduled runs
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+
+    steps:
+      - name: Check production health endpoint
+        id: health-check
+        run: |
+          echo "🏥 Checking health endpoint..."
+
+          # Make request and capture response
+          response=$(curl -s -w "\n%{http_code}" https://www.signflow.ink/api/health)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          echo "HTTP Status: $http_code"
+          echo "Response Body:"
+          echo "$body" | jq '.' || echo "$body"
+
+          # Check if status is 200
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Health check PASSED"
+            echo "status=healthy" >> $GITHUB_OUTPUT
+
+            # Parse and display service status
+            echo "$body" | jq -r '.checks[] | "  - \(.service): \(.status) (\(.message // "OK"))"' || true
+          else
+            echo "❌ Health check FAILED with HTTP $http_code"
+            echo "status=unhealthy" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Check response time
+        if: steps.health-check.outputs.status == 'healthy'
+        run: |
+          echo "⏱️ Measuring response time..."
+
+          time_total=$(curl -o /dev/null -s -w '%{time_total}\n' https://www.signflow.ink/api/health)
+          time_ms=$(echo "$time_total * 1000" | bc | cut -d'.' -f1)
+
+          echo "Response Time: ${time_ms}ms"
+
+          # Warn if response time > 2000ms
+          if [ "$time_ms" -gt 2000 ]; then
+            echo "⚠️ WARNING: Response time is slow (${time_ms}ms > 2000ms)"
+          else
+            echo "✅ Response time is acceptable (${time_ms}ms)"
+          fi
+
+      - name: Verify all services healthy
+        run: |
+          echo "🔍 Verifying individual service health..."
+
+          response=$(curl -s https://www.signflow.ink/api/health)
+
+          # Check each service status
+          db_status=$(echo "$response" | jq -r '.checks[] | select(.service=="supabase_database") | .status')
+          env_status=$(echo "$response" | jq -r '.checks[] | select(.service=="environment_variables") | .status')
+          runtime_status=$(echo "$response" | jq -r '.checks[] | select(.service=="edge_runtime") | .status')
+
+          echo "Database: $db_status"
+          echo "Environment: $env_status"
+          echo "Runtime: $runtime_status"
+
+          # Fail if any service is unhealthy
+          if [ "$db_status" != "healthy" ] || [ "$env_status" != "healthy" ] || [ "$runtime_status" != "healthy" ]; then
+            echo "❌ One or more services are unhealthy"
+            exit 1
+          fi
+
+          echo "✅ All services are healthy"
+
+      - name: Create issue on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🚨 Production Health Check Failed';
+            const body = `
+            ## Health Check Failure
+
+            **Time:** ${new Date().toISOString()}
+            **Workflow Run:** [View Details](${context.payload.repository.html_url}/actions/runs/${context.runId})
+
+            ### What Happened
+            The automated health check for production failed. This could indicate:
+            - Database connection issues
+            - Missing environment variables
+            - Edge function deployment problems
+            - Network/infrastructure issues
+
+            ### Next Steps
+            1. Check the workflow logs for specific error details
+            2. Visit https://www.signflow.ink/api/health manually
+            3. Review Vercel deployment logs
+            4. Check Supabase dashboard for database issues
+
+            ### Manual Verification
+            \`\`\`bash
+            curl -v https://www.signflow.ink/api/health
+            \`\`\`
+
+            ---
+            *This issue was automatically created by GitHub Actions.*
+            `;
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automated,health-check'
+            });
+
+            if (issues.data.length === 0) {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['automated', 'health-check', 'production', 'critical']
+              });
+              console.log('✅ Created new issue for health check failure');
+            } else {
+              // Update existing issue with comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues.data[0].number,
+                body: `**Another health check failure occurred at ${new Date().toISOString()}**\n\n[View Logs](${context.payload.repository.html_url}/actions/runs/${context.runId})`
+              });
+              console.log('✅ Added comment to existing health check issue');
+            }
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Health Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Endpoint:** https://www.signflow.ink/api/health" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.health-check.outputs.status }}" == "healthy" ]; then
+            echo "✅ **Status:** Healthy" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status:** Unhealthy" >> $GITHUB_STEP_SUMMARY
+          fi
