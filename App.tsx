@@ -6,7 +6,7 @@ import QRCodeModal from './components/QRCodeModal';
 import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 import { getRouteContext, buildFormUrl } from './services/routingService';
-import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace } from './utils/accessibility';
+import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRelativeLuminance } from './utils/accessibility';
 
 
 // Reserved slugs that cannot be used for forms
@@ -146,6 +146,7 @@ const App: React.FC = () => {
   const [landingLogoUrl, setLandingLogoUrl] = useState('');
   const [landingPrimaryColor, setLandingPrimaryColor] = useState('#3B82F6');
   const [landingBackgroundColor, setLandingBackgroundColor] = useState('#F8FAFC');
+  const [landingCardColor, setLandingCardColor] = useState('#FFFFFF');
   const [landingButtonText, setLandingButtonText] = useState('Sign Now');
   const [landingCompanyName, setLandingCompanyName] = useState('');
   const [landingContactEmail, setLandingContactEmail] = useState('');
@@ -537,6 +538,8 @@ const App: React.FC = () => {
           setLandingLogoUrl(lc.logoUrl || '');
           setLandingLogoAlt(lc.logoAlt || '');
           setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
+          setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
+          setLandingCardColor(lc.theme?.cardColor || '#FFFFFF');
           setLandingButtonText(lc.buttonText || 'Sign Now');
           setLandingCompanyName(lc.contact?.companyName || '');
           setLandingContactEmail(lc.contact?.email || '');
@@ -725,6 +728,7 @@ const App: React.FC = () => {
     setLandingLogoAlt('');
     setLandingPrimaryColor('#3B82F6');
     setLandingBackgroundColor('#F8FAFC');
+    setLandingCardColor('#FFFFFF');
     setLandingButtonText('Sign Now');
     setLandingCompanyName('');
     setLandingContactEmail('');
@@ -767,6 +771,7 @@ const App: React.FC = () => {
     setLandingLogoAlt(lc.logoAlt || '');
     setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
     setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
+    setLandingCardColor(lc.theme?.cardColor || '#FFFFFF');
     setLandingButtonText(lc.buttonText || 'Sign Now');
     setLandingCompanyName(lc.contact?.companyName || '');
     setLandingContactEmail(lc.contact?.email || '');
@@ -828,6 +833,14 @@ const App: React.FC = () => {
       return;
     }
     
+    // Validate form text (dark slate) against card color
+    const cardContrastValidation = validateContrast('#1E293B', landingCardColor, 'AA', false);
+    if (!cardContrastValidation.valid) {
+      setError(`Card color contrast issue: Form text will be hard to read on this card color. ${cardContrastValidation.suggestion}`);
+      setDetailsTab('landing');
+      return;
+    }
+    
     setLoading(true);
     
     // Validate slug before saving
@@ -855,16 +868,17 @@ const App: React.FC = () => {
       apiDomain: apiDomain.trim(),
       userId: userId || undefined,
       accessToken: sessionToken, // Required by database
-      createdAt: editingId ? currentForm?.createdAt || Date.now() : Date.now(),
+      createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now(),
       // Include landing config if any values are set
-      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
+      landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
         headline: landingHeadline || undefined,
         description: landingDescription || undefined,
         logoUrl: landingLogoUrl || undefined,
         logoAlt: landingLogoAlt || undefined,
-        theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC') ? {
+        theme: (landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF') ? {
           primaryColor: landingPrimaryColor !== '#3B82F6' ? landingPrimaryColor : undefined,
-          backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined
+          backgroundColor: landingBackgroundColor !== '#F8FAFC' ? landingBackgroundColor : undefined,
+          cardColor: landingCardColor !== '#FFFFFF' ? landingCardColor : undefined
         } : undefined,
         buttonText: landingButtonText !== 'Sign Now' ? landingButtonText : undefined,
         contact: (landingCompanyName || landingContactEmail || landingContactPhone) ? {
@@ -922,6 +936,7 @@ const App: React.FC = () => {
       setLandingLogoAlt(lc.logoAlt || '');
       setLandingPrimaryColor(lc.theme?.primaryColor || '#3B82F6');
       setLandingBackgroundColor(lc.theme?.backgroundColor || '#F8FAFC');
+      setLandingCardColor(lc.theme?.cardColor || '#FFFFFF');
       setLandingButtonText(lc.buttonText || 'Sign Now');
       setLandingCompanyName(lc.contact?.companyName || '');
       setLandingContactEmail(lc.contact?.email || '');
@@ -1722,6 +1737,33 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label htmlFor="landing-card-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Card Color (Form)</label>
+                        <div className="flex gap-2">
+                          <input id="landing-card-color-picker" type="color" value={landingCardColor} onChange={e => {
+                            setLandingCardColor(e.target.value);
+                            // Validate that form text (#1E293B) will be readable against the card
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
+                            if (!validation.valid) {
+                              setContrastWarning('Card contrast: ' + (validation.suggestion || ''));
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Card color picker" className="w-12 h-10 rounded cursor-pointer" />
+                          <input id="landing-card-color" value={landingCardColor} onChange={e => {
+                            setLandingCardColor(e.target.value);
+                            // Validate that form text (#1E293B) will be readable against the card
+                            const validation = validateContrast('#1E293B', e.target.value, 'AA', false);
+                            if (!validation.valid) {
+                              setContrastWarning('Card contrast: ' + (validation.suggestion || ''));
+                            } else {
+                              setContrastWarning(null);
+                            }
+                          }} aria-label="Card color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
+                        </div>
+                      </div>
+                    </div>
                     {contrastWarning && (
                       <div className="p-3 text-xs rounded-lg" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)' }} role="alert">
                         ⚠️ {contrastWarning}
@@ -2033,8 +2075,23 @@ const App: React.FC = () => {
         const primaryColor = theme.primaryColor || '#3B82F6';
         const bgColor = theme.backgroundColor || (darkMode ? '#0F172A' : '#F8FAFC');
         const cardColor = theme.cardColor || (darkMode ? '#1E293B' : '#FFFFFF');
-        const textColor = theme.textColor || (darkMode ? '#F1F5F9' : '#1E293B');
-        const mutedColor = theme.mutedColor || (darkMode ? '#94A3B8' : '#64748B');
+        
+        // Calculate text color based on card background luminance for automatic contrast
+        const getTextColorForBackground = (bgHex: string): { text: string, muted: string } => {
+          // Use WCAG 2.1 relative luminance calculation
+          const luminance = getRelativeLuminance(bgHex);
+          
+          // If background is dark (luminance < 0.5), use light text
+          if (luminance < 0.5) {
+            return { text: '#F1F5F9', muted: '#94A3B8' }; // Light text for dark backgrounds
+          } else {
+            return { text: '#1E293B', muted: '#64748B' }; // Dark text for light backgrounds
+          }
+        };
+        
+        const autoTextColors = getTextColorForBackground(cardColor);
+        const textColor = theme.textColor || autoTextColors.text;
+        const mutedColor = theme.mutedColor || autoTextColors.muted;
         
         return (
         <div className="min-h-screen p-6 flex flex-col" style={{ backgroundColor: bgColor }}>
