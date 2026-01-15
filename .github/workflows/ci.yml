@@ -33,5 +33,5 @@ jobs:
           echo "Checking build output..."
           ls -lh dist/
           test -f dist/index.html || (echo "Missing index.html" && exit 1)
-          test -f dist/assets/*.js || (echo "Missing JS bundle" && exit 1)
+          ls dist/assets/*.js > /dev/null 2>&1 || (echo "Missing JS bundle" && exit 1)
           echo "✅ Build artifacts look good"

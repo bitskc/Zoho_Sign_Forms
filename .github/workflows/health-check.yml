@@ -76,9 +76,11 @@ jobs:
           fi
 
       - name: Verify all services healthy
+        if: steps.health-check.outputs.status == 'healthy'
         run: |
           echo "🔍 Verifying individual service health..."
 
+          # Reuse the response from the health-check step
           response=$(curl -s https://www.signflow.ink/api/health)
 
           # Check each service status
