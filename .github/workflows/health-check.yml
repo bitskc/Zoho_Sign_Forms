@@ -8,14 +8,18 @@ on:
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
 
-  # Run after deployments complete
+  # Run after production deployments complete
   deployment_status:
 
 jobs:
   health-check:
     runs-on: ubuntu-latest
-    # Only run on successful deployments or scheduled runs
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    # Only run on successful production deployments (main branch) or scheduled runs
+    # Skip preview deployments to avoid false failures
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production')
 
     steps:
       - name: Check production health endpoint
@@ -23,12 +27,21 @@ jobs:
         run: |
           echo "🏥 Checking health endpoint..."
 
-          # Make request and capture response
-          response=$(curl -s -w "\n%{http_code}" https://www.signflow.ink/api/health)
+          # Make request and capture response with timeout
+          response=$(curl -s -w "\n%{http_code}" --max-time 10 https://www.signflow.ink/api/health || echo "CURL_FAILED\n000")
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
 
           echo "HTTP Status: $http_code"
+
+          # Handle curl failures
+          if [ "$http_code" == "000" ] || [ "$body" == "CURL_FAILED" ]; then
+            echo "❌ Health check FAILED - Could not reach endpoint"
+            echo "This may be expected if the health endpoint hasn't been deployed yet."
+            echo "status=unreachable" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
           echo "Response Body:"
           echo "$body" | jq '.' || echo "$body"
 
@@ -63,9 +76,11 @@ jobs:
           fi
 
       - name: Verify all services healthy
+        if: steps.health-check.outputs.status == 'healthy'
         run: |
           echo "🔍 Verifying individual service health..."
 
+          # Reuse the response from the health-check step
           response=$(curl -s https://www.signflow.ink/api/health)
 
           # Check each service status

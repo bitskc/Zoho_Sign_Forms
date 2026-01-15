@@ -34,7 +34,7 @@ export default async function handler(req: Request): Promise<Response> {
   // Check 1: Supabase Database Connection
   const supabaseStart = Date.now();
   try {
-    const { data, error } = await supabaseServer
+    const { error } = await supabaseServer
       .from('forms')
       .select('id')
       .limit(1)
@@ -71,9 +71,8 @@ export default async function handler(req: Request): Promise<Response> {
 
   // Check 2: Required Environment Variables
   const requiredEnvVars = [
+    'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE',
-    'VITE_SUPABASE_URL',
-    'VITE_SUPABASE_ANON_KEY',
     'GEMINI_API_KEY',
     'PUBLIC_URL',
   ];
