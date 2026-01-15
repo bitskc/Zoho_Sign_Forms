@@ -1190,92 +1190,349 @@ const App: React.FC = () => {
       {isRouteResolved && view === ViewMode.LANDING && (
         <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
           <Header isLoggedIn={!!sessionToken} onLoginClick={() => setView(ViewMode.ADMIN_LOGIN)} />
+          
+          {/* Hero Section */}
           <main className="max-w-6xl mx-auto px-6 pt-16 pb-24">
-            <section className="grid lg:grid-cols-2 gap-14 items-center">
+            <section className="grid lg:grid-cols-2 gap-14 items-center mb-32">
               <div className="space-y-8">
-                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-xs font-semibold uppercase tracking-wide">
+                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-400/10 border border-emerald-400/30 text-xs font-semibold uppercase tracking-wide">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Live Zoho Sign Apps
+                  Custom Signature Portals for Zoho Sign
                 </div>
                 <div className="space-y-4">
-                  <p className="text-sm text-slate-300 font-medium uppercase tracking-wider">SignFlow Pro</p>
                   <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
-                    Launch branded signing portals in minutes—not months.
+                    Don't Pay for Enterprise When You Only Need One Feature
                   </h1>
+                  <p className="text-xl text-emerald-400 font-semibold">
+                    Static links + QR codes for Zoho Sign templates. Just $60/year.
+                  </p>
                   <p className="text-lg text-slate-300 leading-relaxed">
-                    Connect Zoho Sign templates, publish public-facing forms with custom slugs, and capture signatures instantly. No engineering backlog required.
+                    Zoho Sign Enterprise costs $275/user/year and includes dozens of features. But you just need one: shareable links and QR codes that multiple people can use to sign your templates. SignFlow gives you exactly that—without paying for an entire enterprise platform.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setView(ViewMode.ADMIN_LOGIN); }}
-                    className="px-6 py-4 rounded-lg bg-white text-slate-900 font-bold text-sm uppercase tracking-wide shadow-lg hover:translate-y-[-1px] transition"
+                    className="px-8 py-4 rounded-lg bg-emerald-500 text-slate-900 font-bold text-base hover:bg-emerald-400 shadow-lg hover:shadow-emerald-500/50 hover:translate-y-[-2px] transition-all"
                   >
-                    Start Free
+                    Start Free Trial
                   </button>
                   <button
                     onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setView(ViewMode.ADMIN_LOGIN); }}
-                    className="px-6 py-4 rounded-lg border border-white/30 text-white font-bold text-sm uppercase tracking-wide hover:bg-white/10 transition"
+                    className="px-8 py-4 rounded-lg border-2 border-white/30 text-white font-bold text-base hover:bg-white/10 hover:border-white/50 transition-all"
                   >
-                    Admin Login
+                    Sign In
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-sm text-slate-300">
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/5">
-                    <p className="font-bold text-white mb-1">Embed-ready URLs</p>
-                    <p className="leading-relaxed text-slate-400">Custom slugs per template. Drop links into any site or product.</p>
+                <div className="flex items-center gap-6 text-sm text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <span>No credit card</span>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/5">
-                    <p className="font-bold text-white mb-1">Account-level credentials</p>
-                    <p className="leading-relaxed text-slate-400">Store Zoho OAuth credentials once, reuse across every form.</p>
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <span>Setup in 5 minutes</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <span>Unlimited forms per account</span>
                   </div>
                 </div>
               </div>
               <div className="relative">
-                <div className="absolute -top-10 -left-10 h-32 w-32 bg-blue-500/30 blur-3xl rounded-full"></div>
-                <div className="absolute -bottom-16 -right-6 h-36 w-36 bg-emerald-500/20 blur-3xl rounded-full"></div>
-                <div className="relative backdrop-blur-md bg-white/10 border border-white/10 rounded-3xl shadow-2xl p-8 space-y-6">
+                <div className="absolute -top-10 -left-10 h-32 w-32 bg-emerald-500/30 blur-3xl rounded-full"></div>
+                <div className="absolute -bottom-16 -right-6 h-36 w-36 bg-blue-500/20 blur-3xl rounded-full"></div>
+                <div className="relative backdrop-blur-md bg-white/10 border border-white/10 rounded-2xl shadow-2xl p-8 space-y-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-xl font-black">S</div>
+                      <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-blue-600 rounded-xl flex items-center justify-center text-xl font-bold shadow-lg">S</div>
                       <div>
-                        <p className="text-xs uppercase tracking-[0.35em] text-slate-300 font-semibold">Portal Preview</p>
-                        <p className="text-lg font-black">NDA Agreement</p>
+                        <p className="text-xs uppercase tracking-wider text-slate-300 font-semibold">Your Branded Portal</p>
+                        <p className="text-lg font-bold">Employment Application</p>
                       </div>
                     </div>
-                    <span className="text-[11px] px-3 py-1 rounded-full bg-emerald-400/20 text-emerald-100 border border-emerald-500/30 font-black">LIVE</span>
+                    <span className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-400/20 text-emerald-100 border border-emerald-400/30 font-bold">LIVE</span>
                   </div>
                   <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
-                      <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 4.487l1.687-1.687a1.5 1.5 0 112.121 2.122l-1.687 1.687M7.5 11.5l3 3m-7.957 4.957l5.338-1.312a2 2 0 001.01-.543l9.193-9.193a1.5 1.5 0 00-2.122-2.121l-9.193 9.193a2 2 0 00-.543 1.01l-1.312 5.338z" /></svg>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                      <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                       </div>
                       <div>
-                        <p className="font-black">Signer 1 • john@acme.com</p>
-                        <p className="text-xs text-slate-300">Template ready for dispatch</p>
+                        <p className="font-bold">Applicant</p>
+                        <p className="text-xs text-slate-300">Ready to collect signatures</p>
                       </div>
                     </div>
-                    <div className="p-4 rounded-2xl border border-white/10 bg-gradient-to-r from-blue-600/40 to-indigo-600/40">
-                      <p className="text-sm font-semibold text-slate-100">Copy and share</p>
-                      <p className="text-xs text-slate-200 font-mono">https://yourdomain.com/nda-proposal</p>
+                    <div className="p-4 rounded-xl border border-white/10 bg-gradient-to-r from-emerald-600/40 to-blue-600/40">
+                      <p className="text-sm font-semibold text-slate-100 mb-1">Share anywhere</p>
+                      <p className="text-xs text-slate-200 font-mono truncate">yourdomain.com/employment-app</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3 text-xs text-center">
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                      <p className="font-black text-white text-lg">120</p>
-                      <p className="text-slate-300">Sign requests</p>
+                      <p className="font-bold text-white text-lg">78</p>
+                      <p className="text-slate-300">Submissions</p>
                     </div>
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                      <p className="font-black text-white text-lg">99.2%</p>
-                      <p className="text-slate-300">Deliverability</p>
+                      <p className="font-bold text-white text-lg">94%</p>
+                      <p className="text-slate-300">Conversion</p>
                     </div>
                     <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                      <p className="font-black text-white text-lg">12 min</p>
-                      <p className="text-slate-300">Avg. completion</p>
+                      <p className="font-bold text-white text-lg">8 min</p>
+                      <p className="text-slate-300">Avg. time</p>
                     </div>
                   </div>
                 </div>
               </div>
+            </section>
+
+            {/* Pricing Comparison Section */}
+            <section className="mb-32">
+              <div className="text-center mb-12">
+                <h2 className="text-3xl lg:text-4xl font-bold mb-4">Why Pay for Enterprise When You Only Need Static Links?</h2>
+                <p className="text-xl text-slate-300">Zoho Sign Enterprise has many features. But if you just need shareable form links and QR codes, why pay $275/user/year?</p>
+              </div>
+              <div className="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                {/* Zoho Sign Enterprise */}
+                <div className="relative bg-white/5 border-2 border-white/10 rounded-2xl p-8">
+                  <div className="absolute -top-4 left-8 px-4 py-1 bg-slate-700 text-white text-sm font-bold rounded-full">Zoho Sign Enterprise</div>
+                  <div className="pt-4">
+                    <div className="flex items-baseline gap-2 mb-6">
+                      <span className="text-5xl font-bold">$275</span>
+                      <span className="text-slate-400 text-lg">/user/year</span>
+                    </div>
+                    <p className="text-slate-400 mb-6">For a team of 12 users</p>
+                    <div className="text-3xl font-bold text-red-400 mb-8">$3,300/year total</div>
+                    <ul className="space-y-3 text-slate-300">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <span>Charged per user seat</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <span>Complex enterprise setup</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <span>Annual contract required</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <span>Dozens of enterprise features (branding, workflows, teams, etc.)</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* SignFlow Pro */}
+                <div className="relative bg-gradient-to-br from-emerald-600/20 to-blue-600/20 border-2 border-emerald-400/50 rounded-2xl p-8">
+                  <div className="absolute -top-4 left-8 px-4 py-1 bg-gradient-to-r from-emerald-500 to-blue-600 text-white text-sm font-bold rounded-full shadow-lg">SignFlow Pro — Recommended</div>
+                  <div className="pt-4">
+                    <div className="flex items-baseline gap-2 mb-6">
+                      <span className="text-5xl font-bold">$60</span>
+                      <span className="text-slate-300 text-lg">/year per account</span>
+                    </div>
+                    <p className="text-slate-300 mb-6">Unlimited forms per account</p>
+                    <div className="text-3xl font-bold text-emerald-400 mb-2">Save $3,240/year</div>
+                    <p className="text-sm text-emerald-300 mb-6">(98% cost reduction)</p>
+                    <ul className="space-y-3 text-slate-100">
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <span className="font-semibold">Unlimited forms per account</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <span className="font-semibold">5-minute setup</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <span className="font-semibold">Cancel anytime</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <span className="font-semibold">Just the one feature you need: static links + QR codes</span>
+                      </li>
+                    </ul>
+                    <button
+                      onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setView(ViewMode.ADMIN_LOGIN); }}
+                      className="w-full mt-8 px-8 py-4 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-bold text-base hover:shadow-xl hover:scale-105 transition-all"
+                    >
+                      Get Started — $60/Year
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Features Section */}
+            <section className="mb-32">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl lg:text-4xl font-bold mb-4">One Feature, Done Right</h2>
+                <p className="text-xl text-slate-300 max-w-3xl mx-auto">Purpose-built for one thing: giving you shareable links and QR codes for your Zoho Sign templates. No enterprise bloat, no features you'll never use.</p>
+              </div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Static Shareable Links</h3>
+                  <p className="text-slate-300">One permanent URL that multiple people can use to fill out and sign your Zoho Sign template. Share it anywhere.</p>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">5-Minute Setup</h3>
+                  <p className="text-slate-300">Connect your Zoho Sign API credentials once, add your template ID, and you're live. No developers required.</p>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Built-in Analytics</h3>
+                  <p className="text-slate-300">Track visits, submissions, and conversion rates. Know exactly how your forms are performing.</p>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Persistent QR Codes</h3>
+                  <p className="text-slate-300">Print QR codes on forms, posters, or handouts. They work forever—even if you change your form's URL later.</p>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Branded Landing Pages</h3>
+                  <p className="text-slate-300">Customize your signature portal with your logo and brand colors. Make it look professional, not generic.</p>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
+                  <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Secure & Compliant</h3>
+                  <p className="text-slate-300">Your Zoho Sign templates and credentials stay secure. We never store signatures—all signing happens through Zoho's platform.</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Use Cases Section */}
+            <section className="mb-32">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl lg:text-4xl font-bold mb-4">Common Use Cases</h2>
+                <p className="text-xl text-slate-300">Any Zoho Sign template that multiple people need to access and sign through the same link or QR code.</p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">HR & Recruitment</h3>
+                      <p className="text-slate-300 text-sm">Put a link on your careers page or QR code in your office. Every applicant fills out the same employment application form.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">Legal & Compliance</h3>
+                      <p className="text-slate-300 text-sm">Share a link via email or Slack for NDAs and waivers. Everyone signs the same template; no back-and-forth PDFs.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">Events & Registration</h3>
+                      <p className="text-slate-300 text-sm">Print QR codes on event posters or table tents. Attendees scan and sign liability waivers or registration forms instantly.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold mb-2">Real Estate & Property</h3>
+                      <p className="text-slate-300 text-sm">Add a QR code to your "For Rent" sign. Prospective tenants scan it and fill out your rental application on the spot.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Requirements Section */}
+            <section className="mb-32 bg-white/5 border border-white/10 rounded-2xl p-12">
+              <div className="max-w-3xl mx-auto">
+                <h2 className="text-3xl font-bold mb-6 text-center">What You Need to Get Started</h2>
+                <div className="space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0 font-bold">1</div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-2">A Zoho Sign Account (Free or Paid)</h3>
+                      <p className="text-slate-300">You need an active Zoho Sign account. The free plan works perfectly—no need for Enterprise.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0 font-bold">2</div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-2">Zoho Sign API Credits</h3>
+                      <p className="text-slate-300">Zoho charges $50 for API credits (purchased as needed). Each document signed costs 50 cents. Example: 100 signatures = $50 in credits.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center flex-shrink-0 font-bold">3</div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-2">SignFlow Pro ($60/year)</h3>
+                      <p className="text-slate-300">Our platform fee for unlimited custom signature portals, analytics, QR codes, and support.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 pt-8 border-t border-white/10 text-center">
+                  <p className="text-2xl font-bold text-emerald-400 mb-2">Total Cost: $60/year + Zoho API usage</p>
+                  <p className="text-slate-300 mb-2">Example: $60 SignFlow + $50 Zoho credits (100 docs) = $110/year</p>
+                  <p className="text-slate-300">vs. $3,300/year for Zoho Sign Enterprise (12 users)</p>
+                  <p className="text-lg font-semibold text-emerald-300 mt-2">Still saving thousands annually</p>
+                </div>
+              </div>
+            </section>
+
+            {/* CTA Section */}
+            <section className="text-center bg-gradient-to-br from-emerald-600/20 to-blue-600/20 border-2 border-emerald-400/30 rounded-2xl p-12">
+              <h2 className="text-3xl lg:text-4xl font-bold mb-4">Stop Paying for Features You Don't Use</h2>
+              <p className="text-xl text-slate-200 mb-8 max-w-2xl mx-auto">Get shareable links and QR codes for your Zoho Sign templates without upgrading to Enterprise.</p>
+              <div className="flex flex-wrap gap-4 justify-center">
+                <button
+                  onClick={() => { window.location.hash = '#/admin/signup'; setAuthMode('signup'); setView(ViewMode.ADMIN_LOGIN); }}
+                  className="px-10 py-5 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-bold text-lg hover:shadow-2xl hover:scale-105 transition-all"
+                >
+                  Start Your Free Trial
+                </button>
+                <button
+                  onClick={() => { window.location.hash = '#/admin/login'; setAuthMode('login'); setView(ViewMode.ADMIN_LOGIN); }}
+                  className="px-10 py-5 rounded-lg border-2 border-white/50 text-white font-bold text-lg hover:bg-white/10 transition-all"
+                >
+                  Sign In
+                </button>
+              </div>
+              <p className="text-sm text-slate-400 mt-6">No credit card required • Setup in 5 minutes • Cancel anytime</p>
             </section>
           </main>
         </div>
