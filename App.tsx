@@ -93,9 +93,16 @@ const App: React.FC = () => {
     return path !== '/' && !path.startsWith('/api') && !path.startsWith('/qr/');
   };
   
+  // Determine if we should wait for auth before rendering (only for admin pages)
+  const shouldWaitForAuth = () => {
+    const hash = window.location.hash || '';
+    // Only admin pages need to wait for auth
+    return hash.startsWith('#/admin');
+  };
+  
   const [view, setView] = useState<ViewMode | null>(getInitialView());
-  // For public forms, we don't need to wait for auth - resolve immediately
-  const [isRouteResolved, setIsRouteResolved] = useState(isPublicFormPage());
+  // Landing pages and public forms render immediately; only admin pages wait for auth
+  const [isRouteResolved, setIsRouteResolved] = useState(!shouldWaitForAuth());
   const [isFormLoading, setIsFormLoading] = useState(isPublicFormPage());
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
@@ -567,7 +574,10 @@ const App: React.FC = () => {
     
     const init = async () => {
       const path = window.location.pathname || '/';
+      const hash = window.location.hash || '';
       const isPublicForm = path !== '/' && !path.startsWith('/api') && !path.startsWith('/qr/');
+      const isAdminPage = hash.startsWith('#/admin');
+      const isLandingPage = path === '/' && !isAdminPage;
       
       // For public form pages, fetch the form immediately without waiting for auth
       if (isPublicForm) {
@@ -592,7 +602,26 @@ const App: React.FC = () => {
         return;
       }
       
-      // For admin/landing pages, wait for auth check
+      // For landing page, auth check runs in background (non-blocking)
+      if (isLandingPage) {
+        supabase.auth.getSession().then(async ({ data }) => {
+          if (data.session) {
+            setSessionToken(data.session.access_token);
+            setUserId(data.session.user.id);
+            setAuth({ username: data.session.user.email || '', password: '' });
+            
+            // Fetch admin data in background for logged-in users
+            await Promise.all([
+              fetchForms(data.session.access_token),
+              fetchCredentials(data.session.access_token),
+              fetchSubscription(data.session.access_token)
+            ]);
+          }
+        });
+        return;
+      }
+      
+      // For admin pages, wait for auth check before rendering
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setSessionToken(data.session.access_token);
