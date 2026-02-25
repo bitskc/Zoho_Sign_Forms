@@ -37,8 +37,7 @@ export default async function handler(req: Request): Promise<Response> {
     const { error } = await supabaseServer
       .from('forms')
       .select('id')
-      .limit(1)
-      .timeout(5000); // 5 second timeout
+      .limit(1);
 
     const responseTime = Date.now() - supabaseStart;
 
