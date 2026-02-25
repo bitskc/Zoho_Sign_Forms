@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read
     # Only run on successful production deployments (main branch) or scheduled runs
     # Skip preview deployments to avoid false failures
     if: |
