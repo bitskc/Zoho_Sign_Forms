@@ -1,0 +1,44 @@
+<!-- Template for generating og-image.png (screenshot at 1200x630) -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 630px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .glow1 { position: absolute; top: -80px; right: -60px; width: 300px; height: 300px; background: rgba(16,185,129,0.15); border-radius: 50%; filter: blur(80px); }
+  .glow2 { position: absolute; bottom: -100px; left: -40px; width: 350px; height: 350px; background: rgba(59,130,246,0.1); border-radius: 50%; filter: blur(80px); }
+  .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+  .logo-icon { width: 56px; height: 56px; background: linear-gradient(135deg, #10b981, #3b82f6); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: white; }
+  .logo-text { font-size: 32px; font-weight: 700; }
+  .logo-text span { color: #10b981; }
+  h1 { font-size: 52px; font-weight: 800; line-height: 1.15; margin-bottom: 20px; max-width: 900px; }
+  .sub { font-size: 22px; color: #94a3b8; line-height: 1.5; max-width: 800px; }
+  .price { display: inline-block; margin-top: 30px; padding: 10px 24px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; font-size: 20px; font-weight: 700; color: #10b981; }
+  .url { position: absolute; bottom: 40px; right: 80px; font-size: 18px; color: #64748b; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="glow1"></div>
+  <div class="glow2"></div>
+  <div class="logo">
+    <div class="logo-icon">S</div>
+    <div class="logo-text">SignFlow <span>Pro</span></div>
+  </div>
+  <h1>Shareable Links & QR Codes for Zoho Sign Templates</h1>
+  <div class="sub">Turn any Zoho Sign template into a permanent link or QR code. No enterprise plan required.</div>
+  <div class="price">$60/year flat · No per-user fees</div>
+  <div class="url">signflow.ink</div>
+</body>
+</html>

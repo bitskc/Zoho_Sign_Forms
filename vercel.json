@@ -22,8 +22,31 @@
       "destination": "/api/qr-redirect?id=:stableId"
     },
     {
+      "source": "/robots.txt",
+      "destination": "/public/robots.txt"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/public/sitemap.xml"
+    },
+    {
+      "source": "/og-image.svg",
+      "destination": "/public/og-image.svg"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/og-image.(png|svg)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=604800"
+        }
+      ]
     }
   ]
 }
