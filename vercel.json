@@ -25,5 +25,16 @@
       "source": "/:path*",
       "destination": "/index.html"
     }
+  ],
+  "headers": [
+    {
+      "source": "/api/stripe-webhook",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
   ]
 }
