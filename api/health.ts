@@ -34,11 +34,16 @@ export default async function handler(req: Request): Promise<Response> {
   let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
 
   // Check 1: Required Environment Variables (run first so DB check is skipped when creds are missing)
+  // Critical env vars — health check fails if these are missing
   const requiredEnvVars = [
     'SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE',
-    'GEMINI_API_KEY',
-    'PUBLIC_URL',
+  ];
+
+  // Optional env vars — warn if missing but don't fail health check
+  const optionalEnvVars = [
+    'PUBLIC_URL', // Falls back to https://www.signflow.ink if not set
+    'GEMINI_API_KEY', // Only used in client-side Vite build, not API endpoints
   ];
 
   const missingEnvVars = requiredEnvVars.filter(
