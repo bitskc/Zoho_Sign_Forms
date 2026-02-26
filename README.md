@@ -1,20 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SignFlow Pro
 
-# Run and deploy your AI Studio app
+**Shareable links and QR codes for your Zoho Sign templates.**
 
-This contains everything you need to run your app locally.
+Turn any Zoho Sign template into a permanent, shareable URL or QR code. Signers click the link, enter their name and email, and sign your document — no Zoho account required.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1KZ76JnFx61x1ARChjAN30h8wwc9DBtrU
+🔗 **Live:** [signflow.ink](https://signflow.ink)
 
-## Run Locally
+## Features
 
-**Prerequisites:**  Node.js
+- **Permanent signing links** — one URL that works forever, for unlimited signers
+- **QR codes** — print-ready codes for posters, cards, and handouts
+- **Branded landing pages** — your logo, colors, and company info
+- **Analytics** — track visits, submissions, and conversion rates
+- **5-minute setup** — connect Zoho Sign, pick a template, share
 
+## Tech Stack
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- React 19 + TypeScript + Vite
+- Vercel Edge Functions (API)
+- Supabase (auth, database)
+- Zoho Sign API
+
+## Development
+
+```bash
+npm install
+cp .env.local.example .env.local  # Add your keys
+npm run dev                        # Frontend on :5173
+npm run dev:vercel                 # API on :3001
+npm run dev:full                   # Both
+npm test                           # Run tests
+```
+
+## Deployment
+
+Deployed on Vercel. Push to `main` to deploy.
+
+## License
+
+Proprietary. All rights reserved.

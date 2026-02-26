@@ -1226,17 +1226,17 @@ const App: React.FC = () => {
               <div className="space-y-8">
                 <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-400/10 border border-emerald-400/30 text-xs font-semibold uppercase tracking-wide">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Custom Signature Portals for Zoho Sign
+                  The $60/Year Alternative to Zoho Sign Enterprise
                 </div>
                 <div className="space-y-4">
                   <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
-                    Don't Pay for Enterprise When You Only Need One Feature
+                    Zoho Sign Enterprise Costs $275/User. You Don't Need It.
                   </h1>
                   <p className="text-xl text-emerald-400 font-semibold">
-                    Static links + QR codes for Zoho Sign templates. Just $60/year.
+                    Shareable signing links and QR codes for Zoho Sign templates. No sales call. No enterprise contract. Just $60/year.
                   </p>
                   <p className="text-lg text-slate-300 leading-relaxed">
-                    Zoho Sign Enterprise costs $275/user/year and includes dozens of features. But you just need one: shareable links and QR codes that multiple people can use to sign your templates. SignFlow gives you exactly that—without paying for an entire enterprise platform.
+                    Zoho Sign Enterprise costs $275/user/year. But if all you need is a shareable link that anyone can click to sign your template — SignFlow Pro does exactly that for $60/year, full stop. No per-user fees. No Zoho account required for signers.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -1397,55 +1397,55 @@ const App: React.FC = () => {
             <section className="mb-32">
               <div className="text-center mb-16">
                 <h2 className="text-3xl lg:text-4xl font-bold mb-4">One Feature, Done Right</h2>
-                <p className="text-xl text-slate-300 max-w-3xl mx-auto">Purpose-built for one thing: giving you shareable links and QR codes for your Zoho Sign templates. No enterprise bloat, no features you'll never use.</p>
+                <p className="text-xl text-slate-300 max-w-3xl mx-auto">Purpose-built for one thing: giving you shareable signing links and QR codes for your Zoho Sign templates. No enterprise bloat, no features you'll never use.</p>
               </div>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Static Shareable Links</h3>
-                  <p className="text-slate-300">One permanent URL that multiple people can use to fill out and sign your Zoho Sign template. Share it anywhere.</p>
+                  <h3 className="text-xl font-bold mb-2">Permanent Signing Links</h3>
+                  <p className="text-slate-300">Share one URL, use it forever. The link never expires and works for unlimited signers — no Zoho account required.</p>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">5-Minute Setup</h3>
-                  <p className="text-slate-300">Connect your Zoho Sign API credentials once, add your template ID, and you're live. No developers required.</p>
+                  <h3 className="text-xl font-bold mb-2">Live in 5 Minutes</h3>
+                  <p className="text-slate-300">Connect Zoho Sign, pick a template, share the link. That's it. No developers, no IT team, no sales calls.</p>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Built-in Analytics</h3>
-                  <p className="text-slate-300">Track visits, submissions, and conversion rates. Know exactly how your forms are performing.</p>
+                  <h3 className="text-xl font-bold mb-2">See Who's Signing</h3>
+                  <p className="text-slate-300">Track visits, completions, and drop-offs for each link. Know if your template is converting — and where people fall off.</p>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Persistent QR Codes</h3>
-                  <p className="text-slate-300">Print QR codes on forms, posters, or handouts. They work forever—even if you change your form's URL later.</p>
+                  <h3 className="text-xl font-bold mb-2">Print-Ready QR Codes</h3>
+                  <p className="text-slate-300">Put them on posters, business cards, or handouts. They work forever — even if you change your template later.</p>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Branded Landing Pages</h3>
-                  <p className="text-slate-300">Customize your signature portal with your logo and brand colors. Make it look professional, not generic.</p>
+                  <h3 className="text-xl font-bold mb-2">Your Brand, Your Page</h3>
+                  <p className="text-slate-300">Add your logo, colors, and company info. Signers see your brand, not ours.</p>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
                     <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Secure & Compliant</h3>
-                  <p className="text-slate-300">Your Zoho Sign templates and credentials stay secure. We never store signatures—all signing happens through Zoho's platform.</p>
+                  <h3 className="text-xl font-bold mb-2">Your Credentials Stay Safe</h3>
+                  <p className="text-slate-300">We never access your signed documents. All signing happens directly on Zoho's platform — not ours.</p>
                 </div>
               </div>
             </section>
@@ -1539,6 +1539,40 @@ const App: React.FC = () => {
                   <p className="text-slate-300 mb-2">Example: $60 SignFlow + $50 Zoho credits (100 docs) = $110/year</p>
                   <p className="text-slate-300">vs. $3,300/year for Zoho Sign Enterprise (12 users)</p>
                   <p className="text-lg font-semibold text-emerald-300 mt-2">Still saving thousands annually</p>
+                </div>
+              </div>
+            </section>
+
+
+            {/* FAQ Section */}
+            <section className="mb-32">
+              <div className="text-center mb-16">
+                <h2 className="text-3xl lg:text-4xl font-bold mb-4">Frequently Asked Questions</h2>
+              </div>
+              <div className="max-w-3xl mx-auto space-y-6">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">Do I need Zoho Sign Enterprise?</h3>
+                  <p className="text-slate-300">No. SignFlow Pro works with any Zoho Sign plan that has API access enabled. You do not need to upgrade to Enterprise.</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">What does it cost?</h3>
+                  <p className="text-slate-300">SignFlow Pro is $60/year flat — no per-user fees, no hidden charges from us. You also pay Zoho Sign's standard API rate of $0.50 per document sent. For most small businesses sending under 200 documents/year, total cost is under $160.</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">How long does setup take?</h3>
+                  <p className="text-slate-300">About 5 minutes. Connect your Zoho Sign API credentials, select a template, and get a shareable link instantly.</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">What happens when someone clicks my link?</h3>
+                  <p className="text-slate-300">They see a branded page with your company info. They enter their name and email, then are taken directly to your Zoho Sign document to sign — no Zoho account required for signers.</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">Is it secure?</h3>
+                  <p className="text-slate-300">Yes. Your API credentials are encrypted and stored securely. We never access your signed documents — all signing happens directly through Zoho Sign's platform.</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="text-lg font-bold mb-2">Can I cancel anytime?</h3>
+                  <p className="text-slate-300">Yes. No contracts, no cancellation fees. You keep full access through the end of your billing period.</p>
                 </div>
               </div>
             </section>
