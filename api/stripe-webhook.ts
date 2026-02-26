@@ -1,11 +1,12 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { createRequestLogger } from './utils/logger.js';
 
 export const config = { runtime: 'edge' };
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
 /**
  * Verify a Stripe webhook signature using the Web Crypto API (Edge-compatible).
- *
- * Stripe signs webhooks using HMAC-SHA256 with a timestamp-prefixed payload.
  * See: https://stripe.com/docs/webhooks/signatures
  */
 async function verifyStripeSignature(
@@ -13,7 +14,6 @@ async function verifyStripeSignature(
   sigHeader: string,
   secret: string
 ): Promise<boolean> {
-  // Parse the Stripe-Signature header  e.g. "t=1614...,v1=abc...,v0=..."
   const parts: Record<string, string[]> = {};
   for (const part of sigHeader.split(',')) {
     const eq = part.indexOf('=');
@@ -28,13 +28,20 @@ async function verifyStripeSignature(
   const v1Sigs = parts['v1'] ?? [];
   if (!timestamp || v1Sigs.length === 0) return false;
 
-  // Reject webhooks older than 5 minutes to prevent replay attacks
-  const tolerance = 5 * 60; // seconds
+  // Reject webhooks older than the configured tolerance to prevent replay attacks.
+  // Default is 5 minutes (300 seconds), following Stripe's recommendation. Override
+  // via STRIPE_WEBHOOK_TOLERANCE_SECONDS for production tuning (e.g., 60–180s).
+  const DEFAULT_TOLERANCE_SECONDS = 5 * 60;
+  const toleranceEnv = typeof process !== 'undefined' ? process.env?.STRIPE_WEBHOOK_TOLERANCE_SECONDS : undefined;
+  const parsedTolerance = toleranceEnv ? parseInt(toleranceEnv, 10) : NaN;
+  const tolerance = Number.isFinite(parsedTolerance) && parsedTolerance > 0
+    ? parsedTolerance
+    : DEFAULT_TOLERANCE_SECONDS;
+
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - parseInt(timestamp, 10)) > tolerance) return false;
 
   const signedPayload = `${timestamp}.${rawBody}`;
-
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
@@ -62,57 +69,73 @@ async function verifyStripeSignature(
  *   - customer.subscription.updated      → plan/status change
  *   - customer.subscription.deleted      → subscription cancelled
  *
- * Required env var (set in Vercel dashboard):
- *   STRIPE_WEBHOOK_SECRET — from `stripe listen` or Stripe Dashboard webhook settings
+ * Required env var:
+ *   STRIPE_WEBHOOK_SECRET — from Stripe Dashboard → Webhooks → Signing secret
+ * Optional:
+ *   STRIPE_WEBHOOK_TOLERANCE_SECONDS — replay attack tolerance (default 300)
  */
 export default async function handler(req: Request) {
+  const { logger, logResponse } = createRequestLogger(req);
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    logResponse(405);
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: JSON_HEADERS });
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error('STRIPE_WEBHOOK_SECRET is not configured');
-    return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500 });
+    logger.error('STRIPE_WEBHOOK_SECRET is not configured');
+    logResponse(500);
+    return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { status: 500, headers: JSON_HEADERS });
   }
 
   const sigHeader = req.headers.get('stripe-signature');
   if (!sigHeader) {
-    return new Response(JSON.stringify({ error: 'Missing stripe-signature header' }), { status: 400 });
+    logResponse(400);
+    return new Response(JSON.stringify({ error: 'Missing stripe-signature header' }), { status: 400, headers: JSON_HEADERS });
   }
 
   const rawBody = await req.text();
-
   const isValid = await verifyStripeSignature(rawBody, sigHeader, webhookSecret);
   if (!isValid) {
-    return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 400 });
+    logger.warn('Invalid Stripe webhook signature');
+    logResponse(400);
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 400, headers: JSON_HEADERS });
   }
 
   let event: Record<string, unknown>;
   try {
     event = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+    logResponse(400);
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: JSON_HEADERS });
   }
 
   const eventType = event.type as string;
-  const eventObject = event.data ? (event.data as Record<string, unknown>).object as Record<string, unknown> : {};
+  const eventObject = event.data
+    ? (event.data as Record<string, unknown>).object as Record<string, unknown>
+    : {};
+
+  logger.info('Processing Stripe webhook', { eventType });
 
   try {
     switch (eventType) {
       case 'checkout.session.completed': {
-        // checkout.session has customer, subscription, metadata
         const customerId = eventObject.customer as string;
         const subscriptionId = eventObject.subscription as string;
         const metadata = (eventObject.metadata as Record<string, string>) ?? {};
         const userId = metadata.user_id;
 
         if (!userId) {
-          console.warn('checkout.session.completed: no user_id in metadata', { customerId });
+          // Log all available identifiers for manual reconciliation
+          logger.warn('checkout.session.completed: no user_id in metadata — requires manual reconciliation', {
+            customerId,
+            subscriptionId,
+          });
           break;
         }
 
-        await supabaseServer
+        const { error: upsertErr } = await supabaseServer
           .from('subscriptions')
           .upsert(
             {
@@ -124,11 +147,25 @@ export default async function handler(req: Request) {
             },
             { onConflict: 'user_id' }
           );
+
+        if (upsertErr) {
+          logger.error('Failed to upsert subscription on checkout.session.completed', new Error(upsertErr.message), {
+            userId,
+            customerId,
+            subscriptionId,
+          });
+          // Return 500 so Stripe retries on transient DB errors
+          return new Response(
+            JSON.stringify({ received: false, error: upsertErr.message }),
+            { status: 500, headers: JSON_HEADERS }
+          );
+        }
+
+        logger.info('Subscription activated', { userId, customerId });
         break;
       }
 
       case 'customer.subscription.updated': {
-        // subscription object has id, customer, status, current_period_end, metadata
         const subscriptionId = eventObject.id as string;
         const customerId = eventObject.customer as string;
         const status = eventObject.status as string;
@@ -136,10 +173,30 @@ export default async function handler(req: Request) {
         const metadata = (eventObject.metadata as Record<string, string>) ?? {};
         const userId = metadata.user_id;
 
-        // Map Stripe statuses to our plan/status model
-        const isActive = status === 'active' || status === 'trialing';
-        const mappedStatus = isActive ? 'active' : status === 'past_due' ? 'past_due' : 'cancelled';
-        const mappedPlan = isActive ? 'pro' : 'free';
+        // Map all Stripe subscription statuses to local plan/status
+        let mappedStatus: string;
+        let mappedPlan: string;
+
+        if (status === 'active' || status === 'trialing') {
+          mappedStatus = 'active';
+          mappedPlan = 'pro';
+        } else if (status === 'past_due') {
+          // Still on pro, but needs attention
+          mappedStatus = 'past_due';
+          mappedPlan = 'pro';
+        } else if (status === 'incomplete' || status === 'incomplete_expired' || status === 'unpaid') {
+          // Subscription not in good standing — downgrade to free
+          mappedStatus = status;
+          mappedPlan = 'free';
+        } else if (status === 'paused') {
+          // Paused — keep on pro but mark distinctly
+          mappedStatus = 'paused';
+          mappedPlan = 'pro';
+        } else {
+          // cancelled or unknown terminal status
+          mappedStatus = 'cancelled';
+          mappedPlan = 'free';
+        }
 
         const updatePayload: Record<string, unknown> = {
           plan: mappedPlan,
@@ -152,19 +209,25 @@ export default async function handler(req: Request) {
           updatePayload.current_period_end = new Date(currentPeriodEnd * 1000).toISOString();
         }
 
-        if (userId) {
-          // Update by user_id if we have it
-          await supabaseServer
-            .from('subscriptions')
-            .update(updatePayload)
-            .eq('user_id', userId);
-        } else {
-          // Fall back to matching by stripe_customer_id
-          await supabaseServer
-            .from('subscriptions')
-            .update(updatePayload)
-            .eq('stripe_customer_id', customerId);
+        const query = userId
+          ? supabaseServer.from('subscriptions').update(updatePayload).eq('user_id', userId)
+          : supabaseServer.from('subscriptions').update(updatePayload).eq('stripe_customer_id', customerId);
+
+        const { error: updateErr } = await query;
+        if (updateErr) {
+          logger.error('Failed to update subscription on subscription.updated', new Error(updateErr.message), {
+            userId,
+            customerId,
+            subscriptionId,
+            status,
+          });
+          return new Response(
+            JSON.stringify({ received: false, error: updateErr.message }),
+            { status: 500, headers: JSON_HEADERS }
+          );
         }
+
+        logger.info('Subscription updated', { userId, customerId, mappedStatus, mappedPlan });
         break;
       }
 
@@ -180,33 +243,39 @@ export default async function handler(req: Request) {
           stripe_subscription_id: subscriptionId,
         };
 
-        if (userId) {
-          await supabaseServer
-            .from('subscriptions')
-            .update(updatePayload)
-            .eq('user_id', userId);
-        } else {
-          await supabaseServer
-            .from('subscriptions')
-            .update(updatePayload)
-            .eq('stripe_customer_id', customerId);
+        const query = userId
+          ? supabaseServer.from('subscriptions').update(updatePayload).eq('user_id', userId)
+          : supabaseServer.from('subscriptions').update(updatePayload).eq('stripe_customer_id', customerId);
+
+        const { error: deleteErr } = await query;
+        if (deleteErr) {
+          logger.error('Failed to update subscription on subscription.deleted', new Error(deleteErr.message), {
+            userId,
+            customerId,
+          });
+          return new Response(
+            JSON.stringify({ received: false, error: deleteErr.message }),
+            { status: 500, headers: JSON_HEADERS }
+          );
         }
+
+        logger.info('Subscription cancelled', { userId, customerId });
         break;
       }
 
       default:
-        // Acknowledge unknown events without doing anything
-        console.log(`Unhandled Stripe event: ${eventType}`);
+        logger.info(`Unhandled Stripe event type: ${eventType}`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`Error handling Stripe event ${eventType}:`, message);
-    // Still return 200 to prevent Stripe from retrying for transient DB errors
-    return new Response(JSON.stringify({ received: true, warning: message }), { status: 200 });
+    logger.error(`Error handling Stripe event ${eventType}`, err instanceof Error ? err : new Error(message));
+    // Return 500 for unexpected errors so Stripe will retry
+    return new Response(
+      JSON.stringify({ received: false, error: message }),
+      { status: 500, headers: JSON_HEADERS }
+    );
   }
 
-  return new Response(JSON.stringify({ received: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  logResponse(200, { eventType });
+  return new Response(JSON.stringify({ received: true }), { status: 200, headers: JSON_HEADERS });
 }
