@@ -1811,7 +1811,7 @@ const App: React.FC = () => {
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
                         <h3 className={`font-bold text-lg truncate ${darkMode ? 'text-slate-100' : 'text-slate-800'}`}>{form.name}</h3>
-                        <code className={`text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{form.slug}</code>
+                        <code className={`block truncate text-xs font-mono ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{form.slug}</code>
                       </div>
                       <div className={`w-2 h-2 rounded-full bg-green-500 mt-2`} title="Live"></div>
                     </div>
@@ -1829,7 +1829,7 @@ const App: React.FC = () => {
                     </div>
                     
                     {/* Quick Actions (stop propagation so card click doesn't fire) */}
-                    <div className="flex items-center gap-2 pt-2 border-t opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
+                    <div className="card-quick-actions flex items-center gap-2 pt-2 border-t transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
                       <button 
                         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/${form.slug}`); setCopiedLinkId(form.id); setTimeout(() => setCopiedLinkId(prev => prev === form.id ? null : prev), 2000); }}
                         className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
@@ -1901,7 +1901,7 @@ const App: React.FC = () => {
                 <code className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{selectedForm.slug}</code>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
+            <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
               <a 
                 href={`/${selectedForm.slug}`} 
                 target="_blank" 
@@ -2117,8 +2117,7 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
+                    <div className="space-y-2">
                         <label htmlFor="landing-card-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Card Color (Form)</label>
                         <div className="flex gap-2">
                           <input id="landing-card-color-picker" type="color" value={landingCardColor} onChange={e => {
@@ -2143,7 +2142,6 @@ const App: React.FC = () => {
                           }} aria-label="Card color hex value" className={`flex-1 px-3 py-2 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
                         </div>
                       </div>
-                    </div>
                     {contrastWarning && (
                       <div className="p-3 text-xs rounded-lg" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)' }} role="alert">
                         ⚠️ {contrastWarning}
@@ -2304,7 +2302,7 @@ const App: React.FC = () => {
                 </div>
               ) : analytics.has(selectedForm.id) ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
                       <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalVisits}</p>
                       <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
@@ -2362,7 +2360,7 @@ const App: React.FC = () => {
                 <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-xs font-semibold uppercase tracking-[0.2em]`}>Credentials · Subscription</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => { window.location.hash = ''; setView(ViewMode.LANDING); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Home</button>
               <button onClick={() => { window.location.hash = '#/admin/dashboard'; setView(ViewMode.ADMIN_DASHBOARD); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Back to Dashboard</button>
               <button onClick={async () => {
