@@ -117,6 +117,6 @@ export default async function handler(req: Request) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     logger.error('Stripe checkout session creation failed', err instanceof Error ? err : new Error(message));
     logResponse(500);
-    return new Response(JSON.stringify({ error: message }), { status: 500, headers: JSON_HEADERS });
+    return new Response(JSON.stringify({ error: 'Failed to create checkout session. Please try again.' }), { status: 500, headers: JSON_HEADERS });
   }
 }

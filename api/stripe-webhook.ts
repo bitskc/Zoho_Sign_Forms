@@ -3,7 +3,7 @@ import { supabaseServer } from './_supabaseServer.js';
 import { createRequestLogger } from './utils/logger.js';
 
 // Node.js runtime required for node:crypto (timingSafeEqual) and raw body access.
-// IMPORTANT: This handler uses SUPABASE_SERVICE_ROLE_KEY (via supabaseServer) which
+// IMPORTANT: This handler uses SUPABASE_SERVICE_ROLE (via supabaseServer) which
 // bypasses RLS — required for subscription writes since the subscriptions table has no
 // INSERT/UPDATE policy for the anon role. See supabase/migrations/20260509_rls_tables.sql.
 export const config = { runtime: 'nodejs' };

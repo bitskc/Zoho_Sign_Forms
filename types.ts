@@ -32,7 +32,7 @@ export interface LandingConfig {
 }
 
 export interface FormDefinition {
-  id: string;
+  id?: string; // optional: undefined for new forms before DB insert assigns a UUID
   userId?: string;
   name: string;
   slug: string;

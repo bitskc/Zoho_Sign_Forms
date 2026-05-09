@@ -107,7 +107,7 @@ export const exchangeToken = async (
 /**
  * Convenience wrapper for testing a connection
  */
-export const testZohoConnection = async (form: FormDefinition, creds?: { clientId: string; clientSecret: string; refreshToken: string; apiDomain?: string }) => {
+export const testZohoConnection = async (form: FormDefinition, creds?: { clientId?: string; clientSecret?: string; refreshToken?: string; apiDomain?: string }) => {
   return triggerZohoSignTemplate(
     form, 
     { name: "System Test", email: "test@example.com" },

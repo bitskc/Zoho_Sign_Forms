@@ -189,7 +189,7 @@ export default async function handler(req: Request) {
       }), { status: 200 });
     } catch (err: any) {
       console.error('QR code POST exception:', err);
-      return new Response(JSON.stringify({ error: err.message || 'Internal server error' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
     }
   }
 

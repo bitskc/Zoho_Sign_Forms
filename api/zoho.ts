@@ -240,7 +240,7 @@ export default async function handler(req: Request) {
       } catch (authError: any) {
         return new Response(JSON.stringify({
           error: 'Authentication Failure',
-          message: authError.message,
+          message: 'OAuth token refresh failed. Check your Client ID, Client Secret, and Refresh Token.',
           hint: "Your Refresh Token might be invalid or your Client ID/Secret do not match."
         }), { status: 401 });
       }
@@ -352,7 +352,7 @@ export default async function handler(req: Request) {
   } catch (error) {
     return new Response(JSON.stringify({
       error: 'Internal Server Error',
-      message: (error as Error).message
+      message: 'An unexpected error occurred. Please try again.'
     }), { status: 500 });
   }
 }

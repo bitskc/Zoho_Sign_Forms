@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface QRCodeModalProps {
@@ -29,21 +30,29 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
 
-  // On open: save focus origin and focus close button; apply aria-hidden to root.
-  // On close: restore focus and remove aria-hidden.
+  // On open: save focus origin and focus close button; mark sibling elements inert so
+  // screen readers cannot reach background content while the modal is open.
+  // We use `inert` on the direct children of #root that are NOT the modal portal container
+  // (the modal renders via createPortal into document.body, outside #root entirely).
+  // On close: restore focus and remove inert.
   useEffect(() => {
     if (isOpen) {
       previousFocusRef.current = document.activeElement;
-      // Hide background content from screen readers while modal is open.
-      // aria-modal="true" alone has inconsistent AT support (NVDA/Firefox).
-      const root = document.getElementById('root');
-      if (root) root.setAttribute('aria-hidden', 'true');
-      if (modalRef.current) modalRef.current.removeAttribute('aria-hidden');
+      // Apply `inert` to all direct children of <body> except the portal container
+      // (which is appended to body by createPortal). The portal node is the last child.
+      const bodyChildren = Array.from(document.body.children);
+      bodyChildren.forEach((el) => {
+        if (el !== modalRef.current?.closest('[data-modal-portal]')) {
+          (el as HTMLElement).setAttribute('inert', '');
+        }
+      });
       // Defer focus to ensure the modal is in the DOM
       requestAnimationFrame(() => closeButtonRef.current?.focus());
     } else {
-      const root = document.getElementById('root');
-      if (root) root.removeAttribute('aria-hidden');
+      // Remove inert from all body children
+      Array.from(document.body.children).forEach((el) => {
+        (el as HTMLElement).removeAttribute('inert');
+      });
       const prev = previousFocusRef.current as HTMLElement | null;
       if (prev?.focus) prev.focus();
     }
@@ -132,10 +141,12 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
     navigator.clipboard.writeText(url);
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      // The modal itself is NOT aria-hidden (only #root is hidden while it's open)
+      data-modal-portal=""
+      // The modal renders via createPortal into document.body, outside #root.
+      // Background siblings are marked inert (see useEffect above) for AT compatibility.
     >
       {/* Backdrop */}
       <div
@@ -315,6 +326,8 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default QRCodeModal;

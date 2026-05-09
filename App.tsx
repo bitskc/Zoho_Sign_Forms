@@ -51,10 +51,13 @@ declare global {
 
 const App: React.FC = () => {
   const routeContext = getRouteContext();
+  // Destructure to primitives so useEffect dep arrays get stable scalar values
+  // instead of a new object reference on every render.
+  const { subdomain: routeSubdomain, isFormSlug: routeIsFormSlug, formSlug: routeFormSlug } = routeContext;
 
   // Compute BEFORE any hooks so all hooks below are always called unconditionally.
   // The actual redirect side-effect is moved to a useEffect further down (see UX-03).
-  const isRootDomain = routeContext.subdomain === 'root';
+  const isRootDomain = routeSubdomain === 'root';
 
   const getInitialView = () => {
     const hash = window.location.hash || '';
@@ -185,6 +188,7 @@ const App: React.FC = () => {
   const fetchingFormBySlugRef = useRef(false);
   const lastFetchedSlugRef = useRef<string | null>(null);
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
+  const analyticsLoadedRef = useRef<Set<string>>(new Set()); // tracks which form IDs have had analytics fetched
   const qrBatchProcessingRef = useRef(false);
 
   // Fetch analytics for a form
@@ -1190,11 +1194,11 @@ const App: React.FC = () => {
 
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
-    if (routeContext.subdomain === 'app' && routeContext.isFormSlug && routeContext.formSlug) {
-      const wwwUrl = buildFormUrl(routeContext.formSlug);
+    if (routeSubdomain === 'app' && routeIsFormSlug && routeFormSlug) {
+      const wwwUrl = buildFormUrl(routeFormSlug);
       window.location.replace(wwwUrl);
     }
-  }, [routeContext]);
+  }, [routeSubdomain, routeIsFormSlug, routeFormSlug]);
 
   useEffect(() => {
     if (darkMode) {
@@ -1216,16 +1220,22 @@ const App: React.FC = () => {
   }, [view, currentForm?.id]);
 
   // Auto-load analytics when admin dashboard is accessed
+  // Use analyticsLoadedRef to avoid re-triggering on every setAnalytics call (Map ref stability)
   useEffect(() => {
     if (view === ViewMode.ADMIN_DASHBOARD && sessionToken && forms.length > 0) {
-      // Load analytics for all forms if not already loaded
       for (const form of forms) {
-        if (!analytics.has(form.id)) {
+        if (form.id && !analyticsLoadedRef.current.has(form.id)) {
+          analyticsLoadedRef.current.add(form.id);
           fetchAnalytics(form.id).catch(e => console.warn('Analytics auto-load failed for form', form.id, e));
         }
       }
     }
-  }, [view, sessionToken, forms, analytics]);
+  }, [view, sessionToken, forms]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // UX-01: Clear armed delete confirmation if the user navigates away or changes view
+  useEffect(() => {
+    setDeleteConfirmId(null);
+  }, [view]);
 
   // P4-05: Update document.title whenever the active view or current form changes
   useEffect(() => {
@@ -1254,7 +1264,7 @@ const App: React.FC = () => {
       {(!isRouteResolved || view === null) && view !== ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="motion-safe:animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading...</p>
           </div>
         </div>
@@ -1648,6 +1658,7 @@ const App: React.FC = () => {
       )}
 
       {view === ViewMode.ADMIN_LOGIN && (
+        <main id="main-content">
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-900 border-slate-200'} p-10 rounded-lg shadow-2xl border`}>
             <div className="text-center mb-8 space-y-3">
@@ -1684,9 +1695,11 @@ const App: React.FC = () => {
             </form>
           </div>
         </div>
+        </main>
       )}
 
       {view === ViewMode.ADMIN_DASHBOARD && (
+        <main id="main-content">
         <div className="max-w-7xl mx-auto p-6 lg:p-12">
           <div className="flex items-center justify-between mb-12">
             <div className="flex items-center gap-5">
@@ -1851,6 +1864,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+        </main>
       )}
 
       {/* Form Details Page */}
@@ -1858,16 +1872,19 @@ const App: React.FC = () => {
         const selectedForm = getSelectedForm();
         if (!selectedForm) {
           return (
+            <main id="main-content">
             <div className="max-w-4xl mx-auto p-6 lg:p-12 text-center">
               <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>Form not found</p>
               <button onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
                 Back to Dashboard
               </button>
             </div>
+            </main>
           );
         }
         
         return (
+        <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
@@ -2328,10 +2345,12 @@ const App: React.FC = () => {
             </div>
           )}
         </div>
+        </main>
         );
       })()}
 
       {view === ViewMode.ADMIN_SETTINGS && (
+        <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-4">
@@ -2439,6 +2458,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+        </main>
       )}
 
       {view === ViewMode.PUBLIC_FORM && (() => {
@@ -2596,8 +2616,8 @@ const App: React.FC = () => {
         <main id="main-content">
         <div className="flex items-center justify-center min-h-screen text-center px-6">
           <div className="max-w-xl">
-            <h1 className="text-[10rem] font-black text-slate-100 leading-none">404</h1>
-            <h2 className="text-4xl font-black text-slate-100 mb-6">Integration Portal Missing</h2>
+            <h1 className={`text-[10rem] font-black leading-none ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>404</h1>
+            <h2 className={`text-4xl font-black mb-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Integration Portal Missing</h2>
             <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl focus-visible:ring-2 focus-visible:ring-white outline-none">Return to Safety</a>
           </div>
         </div>
