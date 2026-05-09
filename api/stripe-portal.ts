@@ -6,20 +6,12 @@ import {
   createRateLimitResponse,
   RATE_LIMITS,
 } from './utils/rateLimiter.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
 
 export const config = { runtime: 'edge' };
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
-
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
 
 /**
  * POST /api/stripe-portal
@@ -78,12 +70,14 @@ export default async function handler(req: Request) {
     return new Response(JSON.stringify({ error: 'No active Stripe subscription found' }), { status: 404, headers: JSON_HEADERS });
   }
 
-  const origin = req.headers.get('origin') || process.env.APP_URL || 'https://www.signflow.ink';
+  // P2-05: Never construct redirect URLs from the Origin header — it is user-controlled.
+  // Use APP_URL env var (set in Vercel dashboard); fall back to the hardcoded production URL.
+  const appUrl = process.env.APP_URL || 'https://www.signflow.ink';
 
   try {
     const params = new URLSearchParams({
       customer: sub.stripe_customer_id,
-      return_url: `${origin}/dashboard`,
+      return_url: `${appUrl}/dashboard`,
     });
 
     const res = await fetch(`${STRIPE_API}/billing_portal/sessions`, {
@@ -108,6 +102,6 @@ export default async function handler(req: Request) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     logger.error('Stripe billing portal session failed', err instanceof Error ? err : new Error(message));
     logResponse(500);
-    return new Response(JSON.stringify({ error: message }), { status: 500, headers: JSON_HEADERS });
+    return new Response(JSON.stringify({ error: 'Failed to create billing portal session. Please try again.' }), { status: 500, headers: JSON_HEADERS });
   }
 }

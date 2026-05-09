@@ -51,15 +51,13 @@ declare global {
 
 const App: React.FC = () => {
   const routeContext = getRouteContext();
+  // Destructure to primitives so useEffect dep arrays get stable scalar values
+  // instead of a new object reference on every render.
+  const { subdomain: routeSubdomain, isFormSlug: routeIsFormSlug, formSlug: routeFormSlug } = routeContext;
 
-  // If a user hits the bare root domain (e.g. signflow.ink), send them to www with full path
-  if (routeContext.subdomain === 'root') {
-    const hostnameParts = window.location.hostname.split('.').slice(-2);
-    const baseDomain = hostnameParts.join('.');
-    const targetUrl = `${window.location.protocol}//www.${baseDomain}${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.location.replace(targetUrl);
-    return null;
-  }
+  // Compute BEFORE any hooks so all hooks below are always called unconditionally.
+  // The actual redirect side-effect is moved to a useEffect further down (see UX-03).
+  const isRootDomain = routeSubdomain === 'root';
 
   const getInitialView = () => {
     const hash = window.location.hash || '';
@@ -100,10 +98,10 @@ const App: React.FC = () => {
     return hash.startsWith('#/admin');
   };
   
-  const [view, setView] = useState<ViewMode | null>(getInitialView());
+  const [view, setView] = useState<ViewMode | null>(isRootDomain ? null : getInitialView());
   // Landing pages and public forms render immediately; only admin pages wait for auth
-  const [isRouteResolved, setIsRouteResolved] = useState(!shouldWaitForAuth());
-  const [isFormLoading, setIsFormLoading] = useState(isPublicFormPage());
+  const [isRouteResolved, setIsRouteResolved] = useState(isRootDomain ? false : !shouldWaitForAuth());
+  const [isFormLoading, setIsFormLoading] = useState(isRootDomain ? false : isPublicFormPage());
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [auth, setAuth] = useState<{username: string; password: string} | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -129,11 +127,14 @@ const App: React.FC = () => {
   const [apiDomain, setApiDomain] = useState('https://sign.zoho.com');
   const [slug, setSlug] = useState('');
 
-  // User-level Zoho credentials
+  // User-level Zoho credentials (secrets are never held in state after P1-03)
   const [credClientId, setCredClientId] = useState('');
-  const [credClientSecret, setCredClientSecret] = useState('');
-  const [credRefreshToken, setCredRefreshToken] = useState('');
+  // credNewClientSecret / credNewRefreshToken: only populated when user actively wants to set/replace
+  const [credNewClientSecret, setCredNewClientSecret] = useState('');
+  const [credNewRefreshToken, setCredNewRefreshToken] = useState('');
   const [credApiDomain, setCredApiDomain] = useState('https://sign.zoho.com');
+  const [credHasClientSecret, setCredHasClientSecret] = useState(false);
+  const [credHasRefreshToken, setCredHasRefreshToken] = useState(false);
   const [credentialsLoaded, setCredentialsLoaded] = useState(false);
 
   const [subscription, setSubscription] = useState<SubscriptionPlan | null>(null);
@@ -173,6 +174,10 @@ const App: React.FC = () => {
   const [loadingAnalytics, setLoadingAnalytics] = useState<Set<string>>(new Set());
   const [analyticsTimeWindow, setAnalyticsTimeWindow] = useState<'day' | 'week' | 'month' | 'all'>('week');
 
+  // UX-01: Inline delete confirmation and copy-link feedback (replaces confirm() / alert())
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+
   
   // Debounce flags to prevent infinite retry loops
   const [credentialsFetchAttempted, setCredentialsFetchAttempted] = useState(false);
@@ -183,6 +188,7 @@ const App: React.FC = () => {
   const fetchingFormBySlugRef = useRef(false);
   const lastFetchedSlugRef = useRef<string | null>(null);
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
+  const analyticsLoadedRef = useRef<Set<string>>(new Set()); // tracks which form IDs have had analytics fetched
   const qrBatchProcessingRef = useRef(false);
 
   // Fetch analytics for a form
@@ -390,9 +396,12 @@ const App: React.FC = () => {
       if (res.ok) {
         const data: UserCredentials = await res.json();
         setCredClientId(data.clientId || '');
-        setCredClientSecret(data.clientSecret || '');
-        setCredRefreshToken(data.refreshToken || '');
+        setCredHasClientSecret(data.hasClientSecret || false);
+        setCredHasRefreshToken(data.hasRefreshToken || false);
         setCredApiDomain(data.apiDomain || 'https://sign.zoho.com');
+        // Clear any previously entered "new value" inputs when refreshing from server
+        setCredNewClientSecret('');
+        setCredNewRefreshToken('');
       } else if (res.status === 404) {
         // 404 is expected - API endpoint doesn't exist yet
         console.warn('Credentials API not implemented (404)');
@@ -414,8 +423,10 @@ const App: React.FC = () => {
     if (!sessionToken) return;
     const payload = {
       clientId: credClientId.trim(),
-      clientSecret: credClientSecret.trim(),
-      refreshToken: credRefreshToken.trim(),
+      // Only include secret/token if user explicitly entered a new value; omitting them
+      // tells the server to preserve the existing stored value (never overwrite with blank)
+      ...(credNewClientSecret.trim() ? { clientSecret: credNewClientSecret.trim() } : {}),
+      ...(credNewRefreshToken.trim() ? { refreshToken: credNewRefreshToken.trim() } : {}),
       apiDomain: credApiDomain.trim() || 'https://sign.zoho.com'
     };
     const res = await fetch('/api/credentials', {
@@ -866,15 +877,16 @@ const App: React.FC = () => {
       return;
     }
     
+    // P2-03: For new forms, omit id — server generates it via gen_random_uuid().
+    // For updates (editingId is set), include id so the server routes to UPDATE path.
     const formDef: FormDefinition = {
-      id: editingId || crypto.randomUUID(),
+      ...(editingId ? { id: editingId } : {}),
       name: formName.trim(),
       slug: trimmedSlug,
       templateId: templateId.trim(),
       roleName: roleName.trim(),
       apiDomain: apiDomain.trim(),
-      userId: userId || undefined,
-      accessToken: sessionToken, // Required by database
+      // userId and accessToken removed — server resolves ownership from JWT (P1-02 / P3-04)
       createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now(),
       // Include landing config if any values are set
       landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
@@ -918,6 +930,11 @@ const App: React.FC = () => {
       return;
     }
     const saved = await res.json();
+    // P2-03: For new forms, saved.id comes from the server (DB-generated UUID).
+    // Update editingId to the server-assigned id so subsequent edits go to UPDATE path.
+    if (!editingId && saved.id) {
+      setEditingId(saved.id);
+    }
     let updated = editingId ? forms.map(f => f.id === editingId ? saved : f) : [...forms, saved];
     setForms(updated);
 
@@ -965,14 +982,18 @@ const App: React.FC = () => {
 
   const deleteForm = async (id: string) => {
     if (!sessionToken) return;
-    if (confirm("Permanently delete this configuration?")) {
-      await fetch(`/api/forms?id=${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      const updated = forms.filter(f => f.id !== id);
-      setForms(updated);
+    // First click: show inline confirmation; second click: execute deletion
+    if (deleteConfirmId !== id) {
+      setDeleteConfirmId(id);
+      return;
     }
+    setDeleteConfirmId(null);
+    await fetch(`/api/forms?id=${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    });
+    const updated = forms.filter(f => f.id !== id);
+    setForms(updated);
   };
 
   const runConnectionTest = async (form: FormDefinition) => {
@@ -980,10 +1001,8 @@ const App: React.FC = () => {
     setTestResult(null);
     const res = await testZohoConnection(form, {
       clientId: credClientId,
-      clientSecret: credClientSecret,
-      refreshToken: credRefreshToken,
       apiDomain: credApiDomain,
-      userId: userId || undefined
+      // Credentials are loaded server-side from the database for this form's owner (P1-02/P1-03)
     });
     
     setTestResult({
@@ -1003,7 +1022,7 @@ const App: React.FC = () => {
     trackAnalytics(currentForm.id, 'submit_start', { name: signer.name, email: signer.email });
     
     const res = await triggerZohoSignTemplate(currentForm, signer, false, {
-      userId: currentForm.userId
+      // Credentials are resolved server-side from the form's templateId (P1-02)
     });
     
     if (res.success) {
@@ -1162,13 +1181,24 @@ const App: React.FC = () => {
   };
 
 
+  // UX-03: Root-domain redirect moved here from render body to avoid hooks-rules violation.
+  // Runs once on mount; if isRootDomain is true, nothing else is rendered (see guard below).
+  useEffect(() => {
+    if (isRootDomain) {
+      const hostnameParts = window.location.hostname.split('.').slice(-2);
+      const baseDomain = hostnameParts.join('.');
+      const targetUrl = `${window.location.protocol}//www.${baseDomain}${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.replace(targetUrl);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // If someone tries to access a form URL on the app subdomain, force redirect to canonical www URL
   useEffect(() => {
-    if (routeContext.subdomain === 'app' && routeContext.isFormSlug && routeContext.formSlug) {
-      const wwwUrl = buildFormUrl(routeContext.formSlug);
+    if (routeSubdomain === 'app' && routeIsFormSlug && routeFormSlug) {
+      const wwwUrl = buildFormUrl(routeFormSlug);
       window.location.replace(wwwUrl);
     }
-  }, [routeContext]);
+  }, [routeSubdomain, routeIsFormSlug, routeFormSlug]);
 
   useEffect(() => {
     if (darkMode) {
@@ -1190,17 +1220,43 @@ const App: React.FC = () => {
   }, [view, currentForm?.id]);
 
   // Auto-load analytics when admin dashboard is accessed
+  // Use analyticsLoadedRef to avoid re-triggering on every setAnalytics call (Map ref stability)
   useEffect(() => {
     if (view === ViewMode.ADMIN_DASHBOARD && sessionToken && forms.length > 0) {
-      // Load analytics for all forms if not already loaded
       for (const form of forms) {
-        if (!analytics.has(form.id)) {
+        if (form.id && !analyticsLoadedRef.current.has(form.id)) {
+          analyticsLoadedRef.current.add(form.id);
           fetchAnalytics(form.id).catch(e => console.warn('Analytics auto-load failed for form', form.id, e));
         }
       }
     }
-  }, [view, sessionToken, forms, analytics]);
+  }, [view, sessionToken, forms]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // UX-01: Clear armed delete confirmation if the user navigates away or changes view
+  useEffect(() => {
+    setDeleteConfirmId(null);
+  }, [view]);
+
+  // P4-05: Update document.title whenever the active view or current form changes
+  useEffect(() => {
+    const base = 'SignFlow Pro';
+    if (view === ViewMode.PUBLIC_FORM && currentForm) {
+      document.title = `${currentForm.name} | ${base}`;
+    } else if (view === ViewMode.ADMIN_DASHBOARD) {
+      document.title = `Dashboard | ${base}`;
+    } else if (view === ViewMode.FORM_DETAILS && currentForm) {
+      document.title = `${currentForm.name} – Settings | ${base}`;
+    } else if (view === ViewMode.ADMIN_LOGIN) {
+      document.title = `Sign In | ${base}`;
+    } else if (view === ViewMode.NOT_FOUND) {
+      document.title = `404 Not Found | ${base}`;
+    } else {
+      document.title = base;
+    }
+  }, [view, currentForm]);
+
+  // UX-03: All hooks have been called. Now it is safe to bail out early for root-domain redirect.
+  if (isRootDomain) return null;
 
   return (
     <div className={`min-h-screen font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -1208,7 +1264,7 @@ const App: React.FC = () => {
       {(!isRouteResolved || view === null) && view !== ViewMode.PUBLIC_FORM && (
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="motion-safe:animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className={`${darkMode ? 'text-slate-400' : 'text-slate-400'} font-bold text-lg`}>Loading...</p>
           </div>
         </div>
@@ -1255,15 +1311,15 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-6 text-sm text-slate-400">
                   <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                     <span>No credit card</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                     <span>Setup in 5 minutes</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                     <span>Unlimited forms per account</span>
                   </div>
                 </div>
@@ -1285,7 +1341,7 @@ const App: React.FC = () => {
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
                       <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                       </div>
                       <div>
                         <p className="font-bold">Applicant</p>
@@ -1334,19 +1390,19 @@ const App: React.FC = () => {
                     <div className="text-3xl font-bold text-red-400 mb-8">$3,300/year total</div>
                     <ul className="space-y-3 text-slate-300">
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
                         <span>Charged per user seat</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
                         <span>Complex enterprise setup</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-slate-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg>
                         <span>Annual contract required</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                         <span>Dozens of enterprise features (branding, workflows, teams, etc.)</span>
                       </li>
                     </ul>
@@ -1366,19 +1422,19 @@ const App: React.FC = () => {
                     <p className="text-sm text-emerald-300 mb-6">(98% cost reduction)</p>
                     <ul className="space-y-3 text-slate-100">
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                         <span className="font-semibold">Unlimited forms per account</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                         <span className="font-semibold">5-minute setup</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                         <span className="font-semibold">Cancel anytime</span>
                       </li>
                       <li className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                         <span className="font-semibold">Just the one feature you need: static links + QR codes</span>
                       </li>
                     </ul>
@@ -1402,7 +1458,7 @@ const App: React.FC = () => {
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Permanent Signing Links</h3>
                   <p className="text-slate-300">Share one URL, use it forever. The link never expires and works for unlimited signers — no Zoho account required.</p>
@@ -1410,7 +1466,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Live in 5 Minutes</h3>
                   <p className="text-slate-300">Connect Zoho Sign, pick a template, share the link. That's it. No developers, no IT team, no sales calls.</p>
@@ -1418,7 +1474,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">See Who's Signing</h3>
                   <p className="text-slate-300">Track visits, completions, and drop-offs for each link. Know if your template is converting — and where people fall off.</p>
@@ -1426,7 +1482,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Print-Ready QR Codes</h3>
                   <p className="text-slate-300">Put them on posters, business cards, or handouts. They work forever — even if you change your template later.</p>
@@ -1434,7 +1490,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Your Brand, Your Page</h3>
                   <p className="text-slate-300">Add your logo, colors, and company info. Signers see your brand, not ours.</p>
@@ -1442,7 +1498,7 @@ const App: React.FC = () => {
 
                 <div className="bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all">
                   <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center mb-4 shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Your Credentials Stay Safe</h3>
                   <p className="text-slate-300">We never access your signed documents. All signing happens directly on Zoho's platform — not ours.</p>
@@ -1460,7 +1516,7 @@ const App: React.FC = () => {
                 <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                      <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                     </div>
                     <div>
                       <h3 className="text-lg font-bold mb-2">HR & Recruitment</h3>
@@ -1472,7 +1528,7 @@ const App: React.FC = () => {
                 <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                      <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
                     </div>
                     <div>
                       <h3 className="text-lg font-bold mb-2">Legal & Compliance</h3>
@@ -1484,7 +1540,7 @@ const App: React.FC = () => {
                 <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                      <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
                     </div>
                     <div>
                       <h3 className="text-lg font-bold mb-2">Events & Registration</h3>
@@ -1496,7 +1552,7 @@ const App: React.FC = () => {
                 <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 rounded-xl p-6">
                   <div className="flex items-start gap-4">
                     <div className="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                      <svg aria-hidden="true" focusable="false" className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                     </div>
                     <div>
                       <h3 className="text-lg font-bold mb-2">Real Estate & Property</h3>
@@ -1602,6 +1658,7 @@ const App: React.FC = () => {
       )}
 
       {view === ViewMode.ADMIN_LOGIN && (
+        <main id="main-content">
         <div className="flex items-center justify-center min-h-screen p-6">
           <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-900 border-slate-200'} p-10 rounded-lg shadow-2xl border`}>
             <div className="text-center mb-8 space-y-3">
@@ -1638,9 +1695,11 @@ const App: React.FC = () => {
             </form>
           </div>
         </div>
+        </main>
       )}
 
       {view === ViewMode.ADMIN_DASHBOARD && (
+        <main id="main-content">
         <div className="max-w-7xl mx-auto p-6 lg:p-12">
           <div className="flex items-center justify-between mb-12">
             <div className="flex items-center gap-5">
@@ -1742,7 +1801,11 @@ const App: React.FC = () => {
                   <div 
                     key={form.id} 
                     onClick={() => openFormDetails(form)}
-                    className={`${darkMode ? 'bg-slate-900 border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-400'} p-5 rounded-xl border cursor-pointer transition-all hover:shadow-lg group`}
+                    onKeyDown={(e) => handleEnterOrSpace(e, () => openFormDetails(form))}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open details for ${form.name}`}
+                    className={`${darkMode ? 'bg-slate-900 border-slate-800 hover:border-slate-600' : 'bg-white border-slate-200 hover:border-slate-400'} p-5 rounded-xl border cursor-pointer transition-all hover:shadow-lg group focus-visible:ring-2 focus-visible:ring-blue-500 outline-none`}
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between mb-3">
@@ -1768,10 +1831,10 @@ const App: React.FC = () => {
                     {/* Quick Actions (stop propagation so card click doesn't fire) */}
                     <div className="flex items-center gap-2 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
                       <button 
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/${form.slug}`); alert('Link copied!'); }}
+                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/${form.slug}`); setCopiedLinkId(form.id); setTimeout(() => setCopiedLinkId(prev => prev === form.id ? null : prev), 2000); }}
                         className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
                       >
-                        Copy Link
+                        {copiedLinkId === form.id ? 'Copied!' : 'Copy Link'}
                       </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); setQrModalForm(form); setQrModalOpen(true); }}
@@ -1801,6 +1864,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+        </main>
       )}
 
       {/* Form Details Page */}
@@ -1808,25 +1872,29 @@ const App: React.FC = () => {
         const selectedForm = getSelectedForm();
         if (!selectedForm) {
           return (
+            <main id="main-content">
             <div className="max-w-4xl mx-auto p-6 lg:p-12 text-center">
               <p className={darkMode ? 'text-slate-400' : 'text-slate-500'}>Form not found</p>
               <button onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">
                 Back to Dashboard
               </button>
             </div>
+            </main>
           );
         }
         
         return (
+        <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+                aria-label="Back to dashboard"
+                className={`p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${darkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                <svg aria-hidden="true" focusable="false" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
               <div>
                 <h1 className={`text-2xl font-bold ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{selectedForm.name}</h1>
@@ -1843,10 +1911,22 @@ const App: React.FC = () => {
               </a>
               <button 
                 onClick={() => deleteForm(selectedForm.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${darkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-600 hover:bg-red-50'}`}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  deleteConfirmId === selectedForm.id
+                    ? (darkMode ? 'bg-red-700 text-white hover:bg-red-600' : 'bg-red-600 text-white hover:bg-red-700')
+                    : (darkMode ? 'text-red-400 hover:bg-red-900/30' : 'text-red-600 hover:bg-red-50')
+                }`}
               >
-                Delete
+                {deleteConfirmId === selectedForm.id ? 'Confirm Delete?' : 'Delete'}
               </button>
+              {deleteConfirmId === selectedForm.id && (
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${darkMode ? 'text-slate-400 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  Cancel
+                </button>
+              )}
             </div>
           </div>
           
@@ -2169,7 +2249,7 @@ const App: React.FC = () => {
                     onClick={() => regenerateQR(selectedForm.id)}
                     className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
                   >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg aria-hidden="true" focusable="false" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
                     Generate QR Code
@@ -2265,10 +2345,12 @@ const App: React.FC = () => {
             </div>
           )}
         </div>
+        </main>
         );
       })()}
 
       {view === ViewMode.ADMIN_SETTINGS && (
+        <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-4">
@@ -2307,10 +2389,32 @@ const App: React.FC = () => {
                 {!credentialsLoaded && <span className="text-xs text-slate-400">Loading…</span>}
               </div>
               <div className="space-y-4">
-                <input value={credClientId} onChange={e => setCredClientId(e.target.value)} placeholder="Client ID" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                <input type="password" value={credClientSecret} onChange={e => setCredClientSecret(e.target.value)} placeholder="Client Secret" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                <input value={credRefreshToken} onChange={e => setCredRefreshToken(e.target.value)} placeholder="Refresh Token" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                <input value={credApiDomain} onChange={e => setCredApiDomain(e.target.value)} placeholder="API Domain (https://sign.zoho.com)" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                <div>
+                  <label htmlFor="cred-client-id" className={`block text-xs font-bold mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Client ID</label>
+                  <input id="cred-client-id" value={credClientId} onChange={e => setCredClientId(e.target.value)} placeholder="Client ID" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                </div>
+                <div>
+                  <label htmlFor="cred-client-secret" className={`block text-xs font-bold mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Client Secret</label>
+                  <p className={`text-xs mb-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {credHasClientSecret
+                      ? <span aria-label="Client secret: configured">●●●●●●●● configured — leave blank to keep existing</span>
+                      : <span aria-label="Client secret: not configured">Not configured</span>}
+                  </p>
+                  <input id="cred-client-secret" type="password" value={credNewClientSecret} onChange={e => setCredNewClientSecret(e.target.value)} placeholder="New client secret (leave blank to keep existing)" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                </div>
+                <div>
+                  <label htmlFor="cred-refresh-token" className={`block text-xs font-bold mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Refresh Token</label>
+                  <p className={`text-xs mb-1 ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {credHasRefreshToken
+                      ? <span aria-label="Refresh token: configured">●●●●●●●● configured — leave blank to keep existing</span>
+                      : <span aria-label="Refresh token: not configured">Not configured</span>}
+                  </p>
+                  <input id="cred-refresh-token" value={credNewRefreshToken} onChange={e => setCredNewRefreshToken(e.target.value)} placeholder="New refresh token (leave blank to keep existing)" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                </div>
+                <div>
+                  <label htmlFor="cred-api-domain" className={`block text-xs font-bold mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>API Domain</label>
+                  <input id="cred-api-domain" value={credApiDomain} onChange={e => setCredApiDomain(e.target.value)} placeholder="API Domain (https://sign.zoho.com)" className={`w-full px-4 py-3 rounded-lg border text-sm font-mono ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                </div>
                 <button onClick={saveCredentials} className="w-full bg-slate-900 text-white py-3 rounded-lg font-black text-sm hover:bg-slate-800">Save Credentials</button>
               </div>
             </div>
@@ -2354,6 +2458,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+        </main>
       )}
 
       {view === ViewMode.PUBLIC_FORM && (() => {
@@ -2392,6 +2497,7 @@ const App: React.FC = () => {
         const mutedColor = theme.mutedColor || autoTextColors.muted;
         
         return (
+        <main id="main-content">
         <div className="min-h-screen p-6 flex flex-col" style={{ backgroundColor: bgColor }}>
           {/* Logo/Header area */}
           {lc.logoUrl && (
@@ -2406,7 +2512,7 @@ const App: React.FC = () => {
               {successData ? (
                 <div className="p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border" style={{ backgroundColor: cardColor, borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor }}>
                   <div className="w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: darkMode ? 'rgba(16, 185, 129, 0.2)' : '#ECFDF5', color: '#10B981' }}>
-                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                    <svg aria-hidden="true" focusable="false" className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                   </div>
                   <h2 className="text-2xl font-bold mb-2">Document Ready</h2>
                   <p className="text-sm mb-6" style={{ color: mutedColor }}>Your agreement is prepared and waiting.</p>
@@ -2426,7 +2532,7 @@ const App: React.FC = () => {
                     <div className="text-center mb-6">
                       {/* Icon */}
                       <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
-                        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        <svg aria-hidden="true" focusable="false" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                       </div>
                       
                       {/* Headline */}
@@ -2450,18 +2556,29 @@ const App: React.FC = () => {
                       handlePublicSubmit({ name: target.signerName.value, email: target.signerEmail.value });
                     }} className="space-y-5">
                       <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>Full Name</label>
-                        <input required name="signerName" placeholder="John Doe" autoFocus className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                        {/* P4-02 + P4-12: linked label with required marker */}
+                        <label htmlFor="signerName" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
+                          Full Name <span aria-hidden="true" style={{ color: '#B91C1C' }}>*</span>
+                        </label>
+                        <input required id="signerName" name="signerName" placeholder="John Doe" autoFocus aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>Email Address</label>
-                        <input required name="signerEmail" type="email" placeholder="john@example.com" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                        {/* P4-02 + P4-12: linked label with required marker */}
+                        <label htmlFor="signerEmail" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
+                          Email Address <span aria-hidden="true" style={{ color: '#B91C1C' }}>*</span>
+                        </label>
+                        <input required id="signerEmail" name="signerEmail" type="email" placeholder="john@example.com" aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: darkMode ? '#0F172A' : '#F8FAFC', borderColor: darkMode ? '#334155' : '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
                       </div>
+                      {/* P4-06: role="alert" so screen readers announce errors immediately */}
                       {error && (
-                        <div className="p-3 text-xs font-medium rounded-lg" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                        <div role="alert" className="p-3 text-xs font-medium rounded-lg" style={{ backgroundColor: 'rgba(185, 28, 28, 0.1)', color: '#B91C1C', border: '1px solid rgba(185, 28, 28, 0.3)' }}>
                            {error}
                         </div>
                       )}
+                      {/* UX-05: Privacy disclosure */}
+                      <p className="text-[11px] leading-relaxed" style={{ color: mutedColor }}>
+                        By submitting, you agree that your name and email will be shared with the document sender to complete signing via Zoho Sign. We do not store your information beyond what is needed to process your signature.
+                      </p>
                       <button disabled={loading} className="w-full py-3.5 rounded-lg font-bold text-base shadow-lg transition-all active:scale-[0.98] disabled:opacity-50" style={{ backgroundColor: primaryColor, color: '#FFFFFF', boxShadow: `0 4px 14px ${primaryColor}30` }}>
                         {loading ? "Preparing Document..." : buttonText}
                       </button>
@@ -2491,17 +2608,20 @@ const App: React.FC = () => {
             )}
           </div>
         </div>
+        </main>
         );
       })()}
 
       {view === ViewMode.NOT_FOUND && (
+        <main id="main-content">
         <div className="flex items-center justify-center min-h-screen text-center px-6">
           <div className="max-w-xl">
-            <h1 className="text-[10rem] font-black text-slate-100 leading-none">404</h1>
-            <h2 className="text-4xl font-black text-slate-900 mb-6">Integration Portal Missing</h2>
-            <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl">Return to Safety</a>
+            <h1 className={`text-[10rem] font-black leading-none ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>404</h1>
+            <h2 className={`text-4xl font-black mb-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Integration Portal Missing</h2>
+            <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl focus-visible:ring-2 focus-visible:ring-white outline-none">Return to Safety</a>
           </div>
         </div>
+        </main>
       )}
 
       {/* QR Code Modal */}

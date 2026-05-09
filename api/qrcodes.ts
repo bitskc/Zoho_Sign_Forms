@@ -1,46 +1,59 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
+import QRCode from 'qrcode';
 
-// Use Edge runtime - we'll generate QR codes client-side or use a simple SVG approach
-export const config = { runtime: 'edge' };
+// Node.js runtime required for the 'qrcode' package (not Edge-compatible).
+// NOTE: This file must not share imports with Edge-runtime handlers to avoid
+// pulling Node.js APIs into an Edge context.
+export const config = { runtime: 'nodejs' };
 
-// Generate QR code as SVG using a simple algorithm
-// This is a minimal QR code generator for URLs
-function generateQRCodeSVG(data: string, size: number = 256): string {
-  // For simplicity, we'll create a placeholder that links to an external QR service
-  // In production, use a proper QR library or generate client-side
-  const encodedData = encodeURIComponent(data);
-  // Using a simple SVG with embedded QR from Google Charts API (base64 encoded image)
-  // This creates a data URL that the client can display
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodedData}`;
-}
-
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
-
-// Generate a stable QR code ID
-function generateStableId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = 'qr-';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+/**
+ * Generate a secure stable QR code ID using CSPRNG with rejection sampling
+ * to eliminate modulo bias.
+ */
+function generateSecureId(length: number, chars: string): string {
+  const limit = 256 - (256 % chars.length); // rejection threshold to eliminate modulo bias
+  let result = '';
+  while (result.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length * 2));
+    for (const byte of bytes) {
+      if (byte < limit) {
+        result += chars[byte % chars.length];
+        if (result.length === length) break;
+      }
+    }
   }
   return result;
+}
+
+function generateStableId(): string {
+  return 'qr-' + generateSecureId(8, 'abcdefghijklmnopqrstuvwxyz0123456789');
 }
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
   
-  // GET - Retrieve QR code for a form
+  // GET - Retrieve QR code for a form (authentication required)
   if (req.method === 'GET') {
+    const user = await getUserFromAuthHeader(req);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const formId = url.searchParams.get('formId');
     if (!formId) {
       return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+    }
+
+    // Verify the form belongs to the requesting user
+    const { data: formOwner, error: ownerError } = await supabaseServer
+      .from('forms')
+      .select('user_id')
+      .eq('id', formId)
+      .maybeSingle();
+
+    if (ownerError || !formOwner || formOwner.user_id !== user.id) {
+      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
     }
 
     try {
@@ -56,7 +69,7 @@ export default async function handler(req: Request) {
         if (error.message.includes('does not exist') || error.code === '42P01') {
           return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404 });
         }
-        return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
       }
 
       if (!data) {
@@ -140,8 +153,9 @@ export default async function handler(req: Request) {
       const baseUrl = process.env.PUBLIC_URL || 'https://www.signflow.ink';
       const qrUrl = `${baseUrl}/qr/${stableId}`;
 
-      // Generate QR code URL (using external service for Edge compatibility)
-      const qrCodeData = generateQRCodeSVG(qrUrl, 512);
+      // Generate QR code as a base64 PNG data URI server-side.
+      // No external network call — uses the local 'qrcode' package.
+      const qrCodeData = await QRCode.toDataURL(qrUrl, { width: 512, margin: 2 });
 
       // Store or update QR code in database
       const qrRecord = {
@@ -162,7 +176,7 @@ export default async function handler(req: Request) {
 
       if (saveError) {
         console.error('QR code save error:', saveError);
-        return new Response(JSON.stringify({ error: saveError.message }), { status: 400 });
+        return new Response(JSON.stringify({ error: 'Failed to save QR code' }), { status: 500 });
       }
 
       return new Response(JSON.stringify({
@@ -175,7 +189,7 @@ export default async function handler(req: Request) {
       }), { status: 200 });
     } catch (err: any) {
       console.error('QR code POST exception:', err);
-      return new Response(JSON.stringify({ error: err.message || 'Internal server error' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
     }
   }
 
@@ -210,7 +224,8 @@ export default async function handler(req: Request) {
       .eq('form_id', formId);
 
     if (deleteError) {
-      return new Response(JSON.stringify({ error: deleteError.message }), { status: 400 });
+      console.error('QR code delete error:', deleteError);
+      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });

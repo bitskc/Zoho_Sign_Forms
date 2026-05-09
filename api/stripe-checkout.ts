@@ -6,19 +6,11 @@ import {
   createRateLimitResponse,
   RATE_LIMITS,
 } from './utils/rateLimiter.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
 
 export const config = { runtime: 'edge' };
 
 const STRIPE_API = 'https://api.stripe.com/v1';
-
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
 
 /**
  * Make an authenticated POST request to the Stripe REST API.
@@ -96,7 +88,9 @@ export default async function handler(req: Request) {
     return new Response(JSON.stringify({ error: 'STRIPE_PRICE_ID is not configured' }), { status: 500, headers: JSON_HEADERS });
   }
 
-  const origin = req.headers.get('origin') || process.env.APP_URL || 'https://www.signflow.ink';
+  // P2-05: Never construct redirect URLs from the Origin header — it is user-controlled.
+  // Use APP_URL env var (set in Vercel dashboard); fall back to the hardcoded production URL.
+  const appUrl = process.env.APP_URL || 'https://www.signflow.ink';
 
   try {
     const params: Record<string, string | number | boolean> = {
@@ -105,8 +99,8 @@ export default async function handler(req: Request) {
       'line_items[0][quantity]': 1,
       'metadata[user_id]': user.id,
       'subscription_data[metadata][user_id]': user.id,
-      success_url: `${origin}/dashboard?checkout=success`,
-      cancel_url: `${origin}/dashboard?checkout=cancelled`,
+      success_url: `${appUrl}/dashboard?checkout=success`,
+      cancel_url: `${appUrl}/dashboard?checkout=cancelled`,
     };
 
     // Pre-fill email only when a valid value is present
@@ -123,6 +117,6 @@ export default async function handler(req: Request) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     logger.error('Stripe checkout session creation failed', err instanceof Error ? err : new Error(message));
     logResponse(500);
-    return new Response(JSON.stringify({ error: message }), { status: 500, headers: JSON_HEADERS });
+    return new Response(JSON.stringify({ error: 'Failed to create checkout session. Please try again.' }), { status: 500, headers: JSON_HEADERS });
   }
 }

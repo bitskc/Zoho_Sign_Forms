@@ -1,16 +1,8 @@
 import { supabaseServer } from './_supabaseServer.js';
 import { checkRateLimit, createRateLimitResponse, getRateLimitKey, getUserIdFromRequest, RATE_LIMITS } from './utils/rateLimiter.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
 
 export const config = { runtime: 'edge' };
-
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
@@ -27,7 +19,7 @@ export default async function handler(req: Request) {
     }
     
     const body = await req.json();
-    const { formId, eventType, visitorEmail, visitorName, referrer, userAgent, metadata } = body;
+    const { formId, eventType, visitorEmail, visitorName, referrer, userAgent, metadata: rawMetadata } = body;
 
     if (!formId || !eventType) {
       return new Response(JSON.stringify({ error: 'Missing formId or eventType' }), { status: 400 });
@@ -37,6 +29,38 @@ export default async function handler(req: Request) {
     const validEventTypes = ['visit', 'submit_start', 'submit_success', 'submit_error'];
     if (!validEventTypes.includes(eventType)) {
       return new Response(JSON.stringify({ error: 'Invalid eventType' }), { status: 400 });
+    }
+
+    // Sanitize metadata: must be a plain object, max 10 keys, values capped at 512 chars.
+    // Oversized metadata is stripped to { truncated: true } — analytics must not block user flow.
+    let metadata: Record<string, string> | null = null;
+    if (rawMetadata !== undefined && rawMetadata !== null) {
+      if (typeof rawMetadata === 'object' && !Array.isArray(rawMetadata)) {
+        const keys = Object.keys(rawMetadata);
+        if (keys.length > 10) {
+          console.warn('[analytics] metadata truncated: too many keys', { formId, keyCount: keys.length });
+          metadata = { truncated: 'true' };
+        } else {
+          const sanitized: Record<string, string> = {};
+          let wasTruncated = false;
+          for (const k of keys) {
+            const val = String(rawMetadata[k]);
+            if (val.length > 512) {
+              wasTruncated = true;
+              sanitized[k] = val.slice(0, 512);
+            } else {
+              sanitized[k] = val;
+            }
+          }
+          if (wasTruncated) {
+            console.warn('[analytics] metadata value(s) truncated to 512 chars', { formId });
+          }
+          metadata = sanitized;
+        }
+      } else {
+        // Not a plain object — discard silently
+        console.warn('[analytics] metadata discarded: not a plain object', { formId });
+      }
     }
 
     // Verify form exists
@@ -73,8 +97,7 @@ export default async function handler(req: Request) {
       // Don't fail the request if analytics fails - just log it
       return new Response(JSON.stringify({ 
         success: true, 
-        warning: 'Analytics recording failed', 
-        error: error.message || 'Unknown error' 
+        warning: 'Analytics recording failed'
       }), { status: 200 });
     }
 
@@ -120,35 +143,55 @@ export default async function handler(req: Request) {
     const now = new Date();
     const startDate = getWindowStartDate(timeWindow, now);
     
-    // Build query with time window filter
-    let query = supabaseServer
+    // P2-10: Use two targeted DB queries instead of loading all rows into memory.
+    //
+    // Default time window: last 30 days (all analytics for the current calendar window
+    // selected by the 'window' parameter). The aggregate query groups by event_type for
+    // the summary; the recent query returns the latest 20 events for the activity feed.
+    //
+    // This replaces the prior unbounded SELECT * + in-memory .reduce()/.slice(20) pattern.
+
+    // 1. Aggregate: counts per event_type within the window
+    let aggregateQuery = supabaseServer
       .from('form_analytics')
-      .select('*')
+      .select('event_type')
       .eq('form_id', formId);
-    
-    // Apply time filter if not 'all'
+
     if (timeWindow !== 'all') {
-      query = query.gte('created_at', startDate.toISOString());
-    }
-    
-    query = query.order('created_at', { ascending: false });
-
-    const { data: allEvents, error: eventsError } = await query;
-
-    if (eventsError) {
-      return new Response(JSON.stringify({ error: eventsError.message }), { status: 400 });
+      aggregateQuery = aggregateQuery.gte('created_at', startDate.toISOString());
     }
 
-    // Calculate summary statistics with improved logic
-    const events = allEvents || [];
-    const visits = events.filter(e => e.event_type === 'visit').length;
-    const successfulSubmissions = events.filter(e => e.event_type === 'submit_success').length;
-    
-    // Conversion rate = successful submissions / visits (excluding submit_start)
+    const { data: allForSummary, error: summaryError } = await aggregateQuery;
+
+    if (summaryError) {
+      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    }
+
+    // 2. Recent: latest 20 events (columns only)
+    let recentQuery = supabaseServer
+      .from('form_analytics')
+      .select('id,form_id,event_type,visitor_email,visitor_name,referrer,user_agent,metadata,created_at')
+      .eq('form_id', formId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (timeWindow !== 'all') {
+      recentQuery = recentQuery.gte('created_at', startDate.toISOString());
+    }
+
+    const { data: recentRows, error: recentError } = await recentQuery;
+
+    if (recentError) {
+      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    }
+
+    // Build summary from aggregate result
+    const events = allForSummary || [];
+    const visits = events.filter((e: any) => e.event_type === 'visit').length;
+    const successfulSubmissions = events.filter((e: any) => e.event_type === 'submit_success').length;
     const conversionRate = visits > 0 ? (successfulSubmissions / visits) * 100 : 0;
 
-    // Get recent events (last 20)
-    const recentEvents = events.slice(0, 20).map(e => ({
+    const recentEvents = (recentRows || []).map((e: any) => ({
       id: e.id,
       formId: e.form_id,
       eventType: e.event_type,

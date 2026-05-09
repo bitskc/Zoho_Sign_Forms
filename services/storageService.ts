@@ -14,12 +14,9 @@ export const storage = {
   saveForms: (forms: FormDefinition[]) => {
     localStorage.setItem(KEYS.FORMS, JSON.stringify(forms));
   },
-  getAdmin: (): AdminAuth => {
+  getAdmin: (): AdminAuth | null => {
     const data = localStorage.getItem(KEYS.ADMIN);
-    return data ? JSON.parse(data) : {
-      username: 'admin',
-      password: 'admin'
-    };
+    return data ? JSON.parse(data) : null;
   },
   saveAdmin: (admin: AdminAuth) => {
     localStorage.setItem(KEYS.ADMIN, JSON.stringify(admin));

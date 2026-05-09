@@ -32,7 +32,7 @@ export interface LandingConfig {
 }
 
 export interface FormDefinition {
-  id: string;
+  id?: string; // optional: undefined for new forms before DB insert assigns a UUID
   userId?: string;
   name: string;
   slug: string;
@@ -50,9 +50,11 @@ export interface FormDefinition {
 
 export interface UserCredentials {
   clientId: string;
-  clientSecret: string;
-  refreshToken: string;
   apiDomain?: string;
+  /** True if a client secret has been saved server-side. The secret itself is never returned. */
+  hasClientSecret: boolean;
+  /** True if a refresh token has been saved server-side. The token itself is never returned. */
+  hasRefreshToken: boolean;
 }
 
 export interface SubscriptionPlan {
