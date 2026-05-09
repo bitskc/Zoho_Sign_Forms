@@ -121,11 +121,13 @@
       body {
         font-family: 'Inter', sans-serif;
       }
-      /* Hide form card quick-actions by default only on true pointer devices (desktops).
-         Touch-only devices (phones, tablets) always show them since hover never fires. */
-      @media (hover: hover) {
+      /* Hide form card quick-actions by default only on true pointer devices (mouse/trackpad).
+         Touch-only and hybrid devices always show them since hover never reliably fires.
+         Also reveal on :focus-within so keyboard users (tabbing to the card) can see them. */
+      @media (hover: hover) and (pointer: fine) {
         .card-quick-actions { opacity: 0; }
-        .group:hover .card-quick-actions { opacity: 1; }
+        .group:hover .card-quick-actions,
+        .group:focus-within .card-quick-actions { opacity: 1; }
       }
       /* Minimal loading state before React hydrates */
       .loading-placeholder {
