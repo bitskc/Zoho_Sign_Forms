@@ -1701,15 +1701,15 @@ const App: React.FC = () => {
       {view === ViewMode.ADMIN_DASHBOARD && (
         <main id="main-content">
         <div className="max-w-7xl mx-auto p-6 lg:p-12">
-          <div className="flex items-center justify-between mb-12">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-12">
             <div className="flex items-center gap-5">
                <div className="w-14 h-14 bg-slate-900 rounded-lg flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-slate-700/30">S</div>
                <div>
-                  <h1 className={`text-4xl font-bold tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>SignFlow Dashboard</h1>
+                  <h1 className={`text-2xl sm:text-4xl font-bold tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>SignFlow Dashboard</h1>
                   <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-xs font-medium uppercase tracking-wider`}>Admin · Integrations</p>
                </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => { window.location.hash = ''; setView(ViewMode.LANDING); }} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wide transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 Home
               </button>
@@ -1736,7 +1736,7 @@ const App: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Form Editor */}
             <div className="lg:col-span-5">
-              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} p-8 rounded-lg shadow-lg sticky top-8`}>
+              <div className={`${darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'} p-8 rounded-lg shadow-lg lg:sticky lg:top-8`}>
                 <div className="flex items-center justify-between mb-8">
                   <h3 className={`font-bold text-2xl ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{editingId ? "Edit" : "New"} Integration</h3>
                   {editingId && <button onClick={clearForm} className={`text-[10px] px-3 py-1.5 rounded-md font-bold border ${darkMode ? 'bg-slate-800 text-slate-200 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>Cancel</button>}
@@ -1746,7 +1746,7 @@ const App: React.FC = () => {
                   <div className="space-y-4">
                     <input required value={formName} onChange={e => setFormName(e.target.value)} placeholder="Display Name (e.g. NDA Agreement)" className={`w-full px-5 py-4 rounded-lg text-sm font-bold outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                     <input required value={slug} onChange={e => setSlug(e.target.value)} placeholder="URL Slug (e.g. nda-agreement)" className={`w-full px-5 py-4 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <input required value={templateId} onChange={e => setTemplateId(e.target.value)} placeholder="Zoho Template ID" className={`w-full px-5 py-4 rounded-lg text-sm font-mono outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                       <input required value={roleName} onChange={e => setRoleName(e.target.value)} placeholder="Role (e.g. Signer 1)" className={`w-full px-5 py-4 rounded-lg text-sm font-bold outline-none border ${darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
                     </div>
@@ -1829,7 +1829,7 @@ const App: React.FC = () => {
                     </div>
                     
                     {/* Quick Actions (stop propagation so card click doesn't fire) */}
-                    <div className="flex items-center gap-2 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
+                    <div className="flex items-center gap-2 pt-2 border-t opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" style={{ borderColor: darkMode ? '#334155' : '#E2E8F0' }}>
                       <button 
                         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/${form.slug}`); setCopiedLinkId(form.id); setTimeout(() => setCopiedLinkId(prev => prev === form.id ? null : prev), 2000); }}
                         className={`text-[10px] px-2 py-1 rounded font-semibold ${darkMode ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
@@ -1854,7 +1854,7 @@ const App: React.FC = () => {
                 ))}
                 
                 {forms.length === 0 && (
-                  <div className={`col-span-2 p-12 text-center rounded-xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}>
+                  <div className={`col-span-1 md:col-span-2 p-12 text-center rounded-xl border ${darkMode ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400'}`}>
                     <p className="font-semibold mb-2">No forms yet</p>
                     <p className="text-sm">Create your first form using the panel on the left</p>
                   </div>
@@ -1887,7 +1887,7 @@ const App: React.FC = () => {
         <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => { setView(ViewMode.ADMIN_DASHBOARD); window.location.hash = '#/admin/dashboard'; }}
@@ -1897,11 +1897,11 @@ const App: React.FC = () => {
                 <svg aria-hidden="true" focusable="false" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
               <div>
-                <h1 className={`text-2xl font-bold ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{selectedForm.name}</h1>
+                <h1 className={`text-xl sm:text-2xl font-bold ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>{selectedForm.name}</h1>
                 <code className={`text-sm ${darkMode ? 'text-blue-300' : 'text-blue-600'}`}>/{selectedForm.slug}</code>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 pl-9 sm:pl-0">
               <a 
                 href={`/${selectedForm.slug}`} 
                 target="_blank" 
@@ -1931,7 +1931,8 @@ const App: React.FC = () => {
           </div>
           
           {/* Tabs */}
-          <div className={`flex gap-1 p-1 rounded-lg mb-6 ${darkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
+          <div className="overflow-x-auto mb-6">
+          <div className={`flex gap-1 p-1 rounded-lg min-w-max sm:min-w-0 ${darkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
             {[
               { id: 'settings', label: 'Settings' },
               { id: 'landing', label: 'Landing Page' },
@@ -1956,6 +1957,7 @@ const App: React.FC = () => {
                 {tab.label}
               </button>
             ))}
+          </div>
           </div>
           
           {error && (
@@ -2065,9 +2067,9 @@ const App: React.FC = () => {
                         )}
                       </div>
                     )}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color (Button)</label>
+                         <label htmlFor="landing-primary-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Primary Color (Button)</label>
                         <div className="flex gap-2">
                           <input id="landing-primary-color-picker" type="color" value={landingPrimaryColor} onChange={e => {
                             setLandingPrimaryColor(e.target.value);
@@ -2115,7 +2117,7 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label htmlFor="landing-card-color" className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Card Color (Form)</label>
                         <div className="flex gap-2">
@@ -2262,12 +2264,12 @@ const App: React.FC = () => {
           {/* Analytics Tab */}
           {detailsTab === 'analytics' && (
             <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <div>
                   <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Analytics</h2>
                   <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Track form visits and submissions</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <select
                     value={analyticsTimeWindow}
                     onChange={(e) => {
@@ -2352,15 +2354,15 @@ const App: React.FC = () => {
       {view === ViewMode.ADMIN_SETTINGS && (
         <main id="main-content">
         <div className="max-w-5xl mx-auto p-6 lg:p-12">
-          <div className="flex items-center justify-between mb-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-lg shadow-slate-700/30">S</div>
               <div>
-                <h1 className={`text-3xl font-black tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Account Settings</h1>
+                <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${darkMode ? 'text-slate-50' : 'text-slate-900'}`}>Account Settings</h1>
                 <p className={`${darkMode ? 'text-slate-400' : 'text-slate-500'} text-xs font-semibold uppercase tracking-[0.2em]`}>Credentials · Subscription</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={() => { window.location.hash = ''; setView(ViewMode.LANDING); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Home</button>
               <button onClick={() => { window.location.hash = '#/admin/dashboard'; setView(ViewMode.ADMIN_DASHBOARD); }} className={`px-5 py-2 rounded-lg border text-xs font-black uppercase tracking-widest transition-all ${darkMode ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>Back to Dashboard</button>
               <button onClick={async () => {
