@@ -9,7 +9,7 @@ type ZohoCreds = {
   clientSecret?: string;
   refreshToken?: string;
   apiDomain?: string;
-  userId?: string;
+  // userId intentionally removed — the server resolves the form owner from the database (CRIT-01 fix)
 };
 
 export const triggerZohoSignTemplate = async (
@@ -35,14 +35,13 @@ export const triggerZohoSignTemplate = async (
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         apiDomain: creds?.apiDomain || form.apiDomain,
         refreshToken: creds?.refreshToken,
         clientId: creds?.clientId,
         clientSecret: creds?.clientSecret,
-        userId: creds?.userId,
-        templateId: form.templateId, 
-        roleName: form.roleName, 
+        templateId: form.templateId,
+        roleName: form.roleName,
         signer,
         isTest
       })
@@ -108,7 +107,7 @@ export const exchangeToken = async (
 /**
  * Convenience wrapper for testing a connection
  */
-export const testZohoConnection = async (form: FormDefinition, creds?: { clientId: string; clientSecret: string; refreshToken: string; apiDomain?: string; userId?: string }) => {
+export const testZohoConnection = async (form: FormDefinition, creds?: { clientId: string; clientSecret: string; refreshToken: string; apiDomain?: string }) => {
   return triggerZohoSignTemplate(
     form, 
     { name: "System Test", email: "test@example.com" },

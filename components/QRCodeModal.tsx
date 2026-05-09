@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface QRCodeModalProps {
@@ -17,11 +17,70 @@ const COLOR_PRESETS = [
   { name: 'Dark', fg: '#FFFFFF', bg: '#1F2937' },
 ];
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formName, darkMode }) => {
   const [fgColor, setFgColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#FFFFFF');
   const [selectedPreset, setSelectedPreset] = useState(0);
   const qrRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
+
+  // On open: save focus origin and focus close button; apply aria-hidden to root.
+  // On close: restore focus and remove aria-hidden.
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement;
+      // Hide background content from screen readers while modal is open.
+      // aria-modal="true" alone has inconsistent AT support (NVDA/Firefox).
+      const root = document.getElementById('root');
+      if (root) root.setAttribute('aria-hidden', 'true');
+      if (modalRef.current) modalRef.current.removeAttribute('aria-hidden');
+      // Defer focus to ensure the modal is in the DOM
+      requestAnimationFrame(() => closeButtonRef.current?.focus());
+    } else {
+      const root = document.getElementById('root');
+      if (root) root.removeAttribute('aria-hidden');
+      const prev = previousFocusRef.current as HTMLElement | null;
+      if (prev?.focus) prev.focus();
+    }
+  }, [isOpen]);
+
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const trapFocus = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      handleClose();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+
+    const modal = modalRef.current;
+    if (!modal) return;
+    const focusable = Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }, [handleClose]);
 
   if (!isOpen) return null;
 
@@ -37,36 +96,25 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
     const svg = qrRef.current.querySelector('svg');
     if (!svg) return;
 
-    // Serialize SVG to string
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svg);
-
-    // Create Blob and Object URL
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
 
-    // Load into Image element
     const img = new Image();
     img.onload = () => {
-      // Create canvas at high resolution
       const canvas = document.createElement('canvas');
       const size = 1024;
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext('2d');
-      
+
       if (ctx) {
-        // Draw white background first
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, size, size);
-        
-        // Draw image scaled to canvas
         ctx.drawImage(img, 0, 0, size, size);
-        
-        // Export as PNG
+
         const pngUrl = canvas.toDataURL('image/png');
-        
-        // Trigger download
         const link = document.createElement('a');
         link.href = pngUrl;
         link.download = `${formName.replace(/\s+/g, '-').toLowerCase()}-qr.png`;
@@ -74,7 +122,7 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
         link.click();
         document.body.removeChild(link);
       }
-      
+
       URL.revokeObjectURL(svgUrl);
     };
     img.src = svgUrl;
@@ -85,38 +133,54 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      // The modal itself is NOT aria-hidden (only #root is hidden while it's open)
+    >
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
+        aria-hidden="true"
       />
-      
-      {/* Modal */}
-      <div className={`relative z-10 w-full max-w-md mx-4 rounded-2xl shadow-2xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}>
+
+      {/* Modal dialog */}
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qr-modal-title"
+        className={`relative z-10 w-full max-w-md mx-4 rounded-2xl shadow-2xl ${darkMode ? 'bg-slate-800' : 'bg-white'}`}
+        onKeyDown={trapFocus}
+      >
         {/* Header */}
         <div className={`flex items-center justify-between p-4 border-b ${darkMode ? 'border-slate-700' : 'border-slate-200'}`}>
-          <h3 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+          <h3
+            id="qr-modal-title"
+            className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}
+          >
             QR Code for {formName}
           </h3>
-          <button 
-            onClick={onClose}
-            className={`p-1 rounded-full ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+          <button
+            ref={closeButtonRef}
+            onClick={handleClose}
+            aria-label="Close QR code modal"
+            className={`p-1 rounded-full focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        
+
         {/* Content */}
         <div className="p-6">
           {/* QR Code Display */}
-          <div 
+          <div
             ref={qrRef}
             className="flex justify-center mb-6"
           >
-            <div 
+            <div
               className="p-4 rounded-xl"
               style={{ backgroundColor: bgColor }}
             >
@@ -127,28 +191,34 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
                 bgColor={bgColor}
                 level="H"
                 includeMargin={false}
+                aria-label={`QR code linking to ${url}`}
               />
             </div>
           </div>
-          
-          {/* URL Display */}
+
+          {/* Text alternative for QR code — P4-09 */}
           <div className={`mb-4 p-3 rounded-lg ${darkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
             <div className="flex items-center gap-2">
-              <span className={`text-sm truncate flex-1 ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-                {url}
-              </span>
-              <button 
-                onClick={copyToClipboard}
-                className={`p-1.5 rounded ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}
-                title="Copy URL"
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`text-sm truncate flex-1 underline focus-visible:ring-2 focus-visible:ring-blue-500 rounded ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                Direct link: {url}
+              </a>
+              <button
+                onClick={copyToClipboard}
+                aria-label="Copy form URL to clipboard"
+                className={`p-1.5 rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500'}`}
+              >
+                <svg className="w-4 h-4" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                 </svg>
               </button>
             </div>
           </div>
-          
+
           {/* Color Presets */}
           <div className="mb-4">
             <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
@@ -159,13 +229,14 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
                 <button
                   key={preset.name}
                   onClick={() => applyPreset(index)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    selectedPreset === index 
-                      ? 'ring-2 ring-blue-500 ring-offset-2' 
+                  aria-pressed={selectedPreset === index}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                    selectedPreset === index
+                      ? 'ring-2 ring-blue-500 ring-offset-2'
                       : ''
                   }`}
-                  style={{ 
-                    backgroundColor: preset.bg, 
+                  style={{
+                    backgroundColor: preset.bg,
                     color: preset.fg,
                     border: `1px solid ${preset.fg}20`
                   }}
@@ -175,55 +246,67 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
               ))}
             </div>
           </div>
-          
+
           {/* Custom Colors */}
           <div className="flex gap-4 mb-6">
             <div className="flex-1">
-              <label className={`block text-xs font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              <label
+                htmlFor="qr-fg-color"
+                className={`block text-xs font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
+              >
                 Foreground
               </label>
               <div className="flex items-center gap-2">
-                <input 
-                  type="color" 
-                  value={fgColor} 
+                <input
+                  id="qr-fg-color"
+                  type="color"
+                  value={fgColor}
                   onChange={(e) => { setFgColor(e.target.value); setSelectedPreset(-1); }}
-                  className="w-8 h-8 rounded cursor-pointer border-0"
+                  className="w-8 h-8 rounded cursor-pointer border-0 focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-label="QR code foreground color picker"
                 />
-                <input 
-                  type="text" 
-                  value={fgColor} 
+                <input
+                  type="text"
+                  value={fgColor}
                   onChange={(e) => { setFgColor(e.target.value); setSelectedPreset(-1); }}
-                  className={`flex-1 px-2 py-1 text-xs rounded ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-700'}`}
+                  aria-label="QR code foreground color hex value"
+                  className={`flex-1 px-2 py-1 text-xs rounded focus-visible:ring-2 focus-visible:ring-blue-500 ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-700'}`}
                 />
               </div>
             </div>
             <div className="flex-1">
-              <label className={`block text-xs font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              <label
+                htmlFor="qr-bg-color"
+                className={`block text-xs font-medium mb-1 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}
+              >
                 Background
               </label>
               <div className="flex items-center gap-2">
-                <input 
-                  type="color" 
-                  value={bgColor} 
+                <input
+                  id="qr-bg-color"
+                  type="color"
+                  value={bgColor}
                   onChange={(e) => { setBgColor(e.target.value); setSelectedPreset(-1); }}
-                  className="w-8 h-8 rounded cursor-pointer border-0"
+                  className="w-8 h-8 rounded cursor-pointer border-0 focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-label="QR code background color picker"
                 />
-                <input 
-                  type="text" 
-                  value={bgColor} 
+                <input
+                  type="text"
+                  value={bgColor}
                   onChange={(e) => { setBgColor(e.target.value); setSelectedPreset(-1); }}
-                  className={`flex-1 px-2 py-1 text-xs rounded ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-700'}`}
+                  aria-label="QR code background color hex value"
+                  className={`flex-1 px-2 py-1 text-xs rounded focus-visible:ring-2 focus-visible:ring-blue-500 ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-700'}`}
                 />
               </div>
             </div>
           </div>
-          
+
           {/* Download Button */}
           <button
             onClick={downloadQRCode}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" aria-hidden="true" focusable="false" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             Download PNG (1024×1024)

@@ -1,7 +1,27 @@
+import { timingSafeEqual } from 'node:crypto';
 import { supabaseServer } from './_supabaseServer.js';
 import { createRequestLogger } from './utils/logger.js';
 
-export const config = { runtime: 'edge' };
+// Node.js runtime required for node:crypto (timingSafeEqual) and raw body access.
+// IMPORTANT: This handler uses SUPABASE_SERVICE_ROLE_KEY (via supabaseServer) which
+// bypasses RLS — required for subscription writes since the subscriptions table has no
+// INSERT/UPDATE policy for the anon role. See supabase/migrations/20260509_rls_tables.sql.
+export const config = { runtime: 'nodejs' };
+
+/**
+ * Constant-time hex string comparison using Node.js crypto.timingSafeEqual.
+ * Prevents timing attacks on the HMAC signature check.
+ */
+function safeCompare(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a, 'hex');
+    const bb = Buffer.from(b, 'hex');
+    if (ba.length !== bb.length) return false;
+    return timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+}
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -56,7 +76,8 @@ async function verifyStripeSignature(
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-  return v1Sigs.some((sig) => sig === computedHex);
+  // Use constant-time comparison to prevent timing attacks on the HMAC signature.
+  return v1Sigs.some((sig) => safeCompare(sig, computedHex));
 }
 
 /**

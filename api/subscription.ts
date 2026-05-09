@@ -1,75 +1,56 @@
 import { supabaseServer } from './_supabaseServer.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
 
+// Subscription writes are intentionally restricted to the Stripe webhook handler only.
+// POST and PUT are disabled here to prevent self-upgrade exploits.
+// See api/stripe-webhook.ts for the authoritative subscription write path.
 export const config = { runtime: 'edge' };
 
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
-
 export default async function handler(req: Request) {
+  // Block all write methods — subscription state is exclusively managed by the Stripe webhook.
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Allow': 'GET', 'Content-Type': 'application/json' }
+    });
+  }
+
   const user = await getUserFromAuthHeader(req);
   if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
-  const table = 'subscriptions';
-
   if (req.method === 'GET') {
-    // Try to get subscription data, fallback to default if table doesn't exist
+    const table = 'subscriptions';
     try {
       const { data, error } = await supabaseServer
         .from(table)
         .select('plan,status,seats')
         .eq('user_id', user.id)
         .maybeSingle();
-        
-      if (error && error.message?.includes('relation "subscriptions" does not exist')) {
-        // Table doesn't exist yet - return default
+
+      if (error) {
+        // Table doesn't exist yet (42P01) — return free plan default
+        if (error.code === '42P01' || error.message?.includes('relation "subscriptions" does not exist')) {
+          return new Response(JSON.stringify({ plan: 'free', status: 'active', seats: 1 }), { status: 200 });
+        }
+        // All other DB errors are server errors — do not silently return fabricated data
+        console.error('[subscription] DB error:', error.message);
+        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+      }
+
+      if (!data) {
         return new Response(JSON.stringify({ plan: 'free', status: 'active', seats: 1 }), { status: 200 });
       }
-      
-      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
-      if (!data) return new Response(JSON.stringify({ plan: 'free', status: 'active', seats: 1 }), { status: 200 });
       return new Response(JSON.stringify(data), { status: 200 });
-    } catch (e) {
-      // Fallback to default subscription
-      return new Response(JSON.stringify({ plan: 'free', status: 'active', seats: 1 }), { status: 200 });
+    } catch (e: any) {
+      console.error('[subscription] Unexpected error:', e?.message);
+      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
     }
   }
 
-  if (req.method === 'POST' || req.method === 'PUT') {
-    const body = await req.json();
-    const record = {
-      user_id: user.id,
-      plan: body.plan || 'free',
-      status: body.status || 'active',
-      seats: body.seats ?? 1
-    };
-    
-    try {
-      const { data, error } = await supabaseServer
-        .from(table)
-        .upsert(record, { onConflict: 'user_id' })
-        .select()
-        .maybeSingle();
-        
-      if (error && error.message?.includes('relation "subscriptions" does not exist')) {
-        // Table doesn't exist - just return success with the record
-        return new Response(JSON.stringify(record), { status: 200 });
-      }
-      
-      if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400 });
-      return new Response(JSON.stringify(data), { status: 200 });
-    } catch (e) {
-      // Fallback - return success
-      return new Response(JSON.stringify(record), { status: 200 });
-    }
-  }
-
-  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    status: 405,
+    headers: { 'Allow': 'GET', 'Content-Type': 'application/json' }
+  });
 }

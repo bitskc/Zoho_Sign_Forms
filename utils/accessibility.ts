@@ -16,10 +16,14 @@ export function getRelativeLuminance(hex: string): number {
   const g = parseInt(rgb.substr(2, 2), 16) / 255;
   const b = parseInt(rgb.substr(4, 2), 16) / 255;
   
-  // Apply gamma correction
-  const rsRGB = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
-  const gsRGB = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
-  const bsRGB = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+  // NOTE: WCAG 2.0/2.1/2.2 normative text specifies 0.03928, but 0.04045 is the
+  // colorimetrically correct IEC 61966-2-1 (sRGB) threshold. This utility is used for
+  // dynamic button text color selection, not formal conformance auditing, so the
+  // colorimetrically correct value is preferred. Formal checkers may report a minor
+  // discrepancy for edge-case colors near this threshold.
+  const rsRGB = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+  const gsRGB = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+  const bsRGB = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
   
   // Calculate luminance
   return 0.2126 * rsRGB + 0.7152 * gsRGB + 0.0722 * bsRGB;

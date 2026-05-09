@@ -7,16 +7,27 @@ import {
   RATE_LIMITS,
   cleanupRateLimitStore
 } from './utils/rateLimiter.js';
+import { getUserFromAuthHeader } from './utils/auth.js';
 
 export const config = { runtime: 'edge' };
 
-async function getUserFromAuthHeader(req: Request) {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length);
-  const { data, error } = await supabaseServer.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
+/**
+ * Returns a masked credential object safe to send to the frontend.
+ * Secrets (clientSecret, refreshToken) are never returned — only boolean flags
+ * indicating whether they have been set.
+ */
+function maskCredentials(row: {
+  zoho_client_id: string | null;
+  zoho_client_secret: string | null;
+  zoho_refresh_token: string | null;
+  api_domain: string | null;
+}) {
+  return {
+    clientId: row.zoho_client_id,
+    apiDomain: row.api_domain,
+    hasClientSecret: Boolean(row.zoho_client_secret),
+    hasRefreshToken: Boolean(row.zoho_refresh_token),
+  };
 }
 
 export default async function handler(req: Request) {
@@ -57,60 +68,64 @@ export default async function handler(req: Request) {
         .maybeSingle();
       if (error) {
         logger.error('DB error fetching credentials', error);
-        logResponse(400);
-        return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+        logResponse(500);
+        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
       }
       if (!data) {
         logger.info('No credentials found');
         logResponse(404);
         return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
       }
-      logger.info('Credentials returned');
+      logger.info('Credentials returned (masked)');
       logResponse(200);
-      return new Response(JSON.stringify({
-        clientId: data.zoho_client_id,
-        clientSecret: data.zoho_client_secret,
-        refreshToken: data.zoho_refresh_token,
-        apiDomain: data.api_domain
-      }), { status: 200 });
+      return new Response(JSON.stringify(maskCredentials(data)), { status: 200 });
     }
 
     if (req.method === 'POST' || req.method === 'PUT') {
       const body = await req.json();
       logger.debug('Updating credentials', sanitizeLogContext({ apiDomain: body.apiDomain }));
+
+      // Fetch existing record so we can preserve secrets the caller chose not to update
+      const { data: existing } = await supabaseServer
+        .from(table)
+        .select('zoho_client_secret,zoho_refresh_token')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
       const record = {
         user_id: user.id,
         zoho_client_id: body.clientId,
-        zoho_client_secret: body.clientSecret,
-        zoho_refresh_token: body.refreshToken,
+        // If clientSecret is absent/empty, preserve the stored value (never overwrite with blank)
+        zoho_client_secret: body.clientSecret || existing?.zoho_client_secret || null,
+        // Same for refreshToken
+        zoho_refresh_token: body.refreshToken || existing?.zoho_refresh_token || null,
         api_domain: body.apiDomain || 'https://sign.zoho.com'
       };
 
       const { data, error } = await supabaseServer
         .from(table)
         .upsert(record, { onConflict: 'user_id' })
-        .select()
+        .select('zoho_client_id,zoho_client_secret,zoho_refresh_token,api_domain')
         .maybeSingle();
       if (error) {
         logger.error('DB error updating credentials', error);
-        logResponse(400);
-        return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+        logResponse(500);
+        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
       }
       logger.info('Credentials updated');
       logResponse(200);
-      return new Response(JSON.stringify({
-        clientId: data?.zoho_client_id,
-        clientSecret: data?.zoho_client_secret,
-        refreshToken: data?.zoho_refresh_token,
-        apiDomain: data?.api_domain
-      }), { status: 200 });
+      // Return masked shape — never return secrets in response
+      return new Response(JSON.stringify(data ? maskCredentials(data) : { clientId: body.clientId, apiDomain: body.apiDomain, hasClientSecret: Boolean(record.zoho_client_secret), hasRefreshToken: Boolean(record.zoho_refresh_token) }), { status: 200 });
     }
 
     logger.warn('Method not allowed', { method: req.method });
     logResponse(405);
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Allow': 'GET, POST, PUT' }
+    });
   } catch (err) {
     logError(err, 500);
-    return new Response(JSON.stringify({ error: 'Internal Server Error', message: (err as Error).message }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
   }
 }
