@@ -9,7 +9,9 @@ type ZohoCreds = {
   clientSecret?: string;
   refreshToken?: string;
   apiDomain?: string;
-  // userId intentionally removed — the server resolves the form owner from the database (CRIT-01 fix)
+  // userId is forwarded to the server for logging/auditing purposes only.
+  // The server ignores it and resolves the form owner from the database (CRIT-01 fix).
+  userId?: string;
 };
 
 export const triggerZohoSignTemplate = async (
@@ -40,6 +42,7 @@ export const triggerZohoSignTemplate = async (
         refreshToken: creds?.refreshToken,
         clientId: creds?.clientId,
         clientSecret: creds?.clientSecret,
+        userId: creds?.userId,
         templateId: form.templateId,
         roleName: form.roleName,
         signer,

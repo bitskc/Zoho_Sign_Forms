@@ -6,7 +6,7 @@ const mockSupabaseServer = {
   from: () => ({
     select: () => ({
       limit: () => ({
-        timeout: mockSupabaseQuery,
+        abortSignal: mockSupabaseQuery,
       }),
     }),
   }),

@@ -33,7 +33,7 @@ export default async function handler(req: Request): Promise<Response> {
   const checks: HealthCheck[] = [];
   let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
 
-  // Check 1: Required Environment Variables (run first so DB check is skipped when creds are missing)
+  // --- Pre-flight: determine which env vars are present ---
   // Critical env vars — health check fails if these are missing
   const requiredEnvVars = [
     'SUPABASE_URL',
@@ -50,25 +50,9 @@ export default async function handler(req: Request): Promise<Response> {
     (varName) => !process.env[varName]
   );
 
-  if (missingEnvVars.length > 0) {
-    checks.push({
-      service: 'environment_variables',
-      status: 'unhealthy',
-      message: `Missing required environment variables: ${missingEnvVars.join(', ')}`,
-    });
-    overallStatus = 'unhealthy';
-  } else {
-    checks.push({
-      service: 'environment_variables',
-      status: 'healthy',
-      message: 'All required environment variables are set',
-    });
-  }
+  const dbEnvPresent = missingEnvVars.length === 0;
 
-  // Check 2: Supabase Database Connection
-  // Only attempt if required env vars are present (avoids misleading "DB error" when creds missing)
-  const dbEnvPresent = !missingEnvVars.includes('SUPABASE_URL') && !missingEnvVars.includes('SUPABASE_SERVICE_ROLE');
-
+  // --- Check 1: Supabase Database Connection (listed first in response) ---
   if (dbEnvPresent) {
     const supabaseStart = Date.now();
     try {
@@ -123,7 +107,23 @@ export default async function handler(req: Request): Promise<Response> {
     overallStatus = 'unhealthy';
   }
 
-  // Check 3: Edge Runtime Status
+  // --- Check 2: Required Environment Variables ---
+  if (missingEnvVars.length > 0) {
+    checks.push({
+      service: 'environment_variables',
+      status: 'unhealthy',
+      message: `Missing required environment variables: ${missingEnvVars.join(', ')}`,
+    });
+    overallStatus = 'unhealthy';
+  } else {
+    checks.push({
+      service: 'environment_variables',
+      status: 'healthy',
+      message: 'All required environment variables are set',
+    });
+  }
+
+  // --- Check 3: Edge Runtime Status ---
   checks.push({
     service: 'edge_runtime',
     status: 'healthy',
