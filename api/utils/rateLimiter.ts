@@ -109,6 +109,8 @@ export function createRateLimitResponse(result: RateLimitResult): Response {
     {
       status: 429,
       headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'private, no-store',
         'Retry-After': result.retryAfter?.toString() || '60',
         'X-RateLimit-Remaining': result.remaining.toString(),
         'X-RateLimit-Reset': new Date(result.resetTime).toISOString(),
@@ -126,11 +128,26 @@ export async function getUserIdFromRequest(req: Request): Promise<string | undef
     return undefined;
   }
 
-  // Note: Full JWT parsing would require a library
-  // For now, we just use the header as part of the key
-  // In production, validate and extract the actual user ID
   const token = authHeader.slice('Bearer '.length);
-  return token.slice(0, 20); // Use first 20 chars as pseudo-ID
+
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return undefined;
+
+    const payloadBase64Url = parts[1];
+    const payloadBase64 = payloadBase64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payloadBase64 + '='.repeat((4 - (payloadBase64.length % 4)) % 4);
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+
+    if (payload && typeof payload.sub === 'string' && payload.sub.length > 0) {
+      return payload.sub;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 /**
@@ -140,7 +157,7 @@ export const RATE_LIMITS = {
   // Zoho API endpoint - more restrictive
   ZOHO_API: {
     windowMs: 60 * 1000, // 1 minute
-    maxRequests: 20, // 20 requests per minute
+    maxRequests: 5, // 5 requests per minute
   },
   // Credentials management
   CREDENTIALS: {
@@ -150,7 +167,7 @@ export const RATE_LIMITS = {
   // Forms endpoint
   FORMS: {
     windowMs: 60 * 1000, // 1 minute
-    maxRequests: 30, // 30 requests per minute
+    maxRequests: 60, // 60 requests per minute
   },
   // Subscription checks
   SUBSCRIPTION: {
@@ -160,7 +177,17 @@ export const RATE_LIMITS = {
   // Analytics endpoint - more permissive since it's non-critical
   ANALYTICS: {
     windowMs: 60 * 1000, // 1 minute
-    maxRequests: 10, // 10 requests per minute
+    maxRequests: 60, // 60 requests per minute
+  },
+  // QR code generation/deletion can consume CPU and DB writes.
+  QRCODES: {
+    windowMs: 60 * 1000,
+    maxRequests: 20,
+  },
+  // Public QR redirects are lightweight reads but unauthenticated.
+  QR_REDIRECT: {
+    windowMs: 60 * 1000,
+    maxRequests: 120,
   },
 };
 

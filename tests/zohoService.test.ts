@@ -67,4 +67,17 @@ describe('zohoService', () => {
     expect(res.success).toBe(true);
     expect(res.signingUrl).toBe('URL');
   });
+
+  it('parses minimal public submit responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ requestId: 'RID', signingUrl: 'URL' })
+    });
+    // @ts-ignore
+    global.fetch = mockFetch;
+
+    const res = await triggerZohoSignTemplate(demoForm, signer);
+
+    expect(res).toEqual({ success: true, requestId: 'RID', signingUrl: 'URL' });
+  });
 });

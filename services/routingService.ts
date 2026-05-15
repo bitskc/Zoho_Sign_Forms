@@ -9,6 +9,20 @@ export interface RouteContext {
   formSlug: string | null;
 }
 
+const RESERVED_FORM_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
+
+export function isValidPublicFormSlug(slug: string): boolean {
+  if (!slug) return false;
+  if (!/^[a-z0-9-]+$/.test(slug)) return false;
+  return !RESERVED_FORM_SLUGS.includes(slug.toLowerCase());
+}
+
+export function getPublicFormSlugFromPath(pathname: string): string | null {
+  const cleanPath = pathname.substring(1).replace(/\/$/, '');
+  if (!cleanPath || cleanPath.includes('/')) return null;
+  return isValidPublicFormSlug(cleanPath) ? cleanPath : null;
+}
+
 export function getSubdomainType(hostname: string): SubdomainType {
   // Local development: treat localhost as www by default, with optional ?subdomain overrides
   if (hostname === 'localhost' || hostname.startsWith('127.0.0.1')) {
@@ -39,12 +53,8 @@ export function getRouteContext(): RouteContext {
   const { hostname, pathname, search, hash } = window.location;
   const subdomain = getSubdomainType(hostname);
 
-  const cleanPath = pathname.substring(1).replace(/\/$/, '');
-  const isFormSlug = Boolean(
-    cleanPath &&
-      !cleanPath.startsWith('api') &&
-      /^[a-z0-9-]+$/.test(cleanPath)
-  );
+  const formSlug = getPublicFormSlugFromPath(pathname);
+  const isFormSlug = Boolean(formSlug);
 
   return {
     subdomain,
@@ -52,7 +62,7 @@ export function getRouteContext(): RouteContext {
     search,
     hash,
     isFormSlug,
-    formSlug: isFormSlug ? cleanPath : null,
+    formSlug,
   };
 }
 

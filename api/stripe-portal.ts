@@ -11,7 +11,10 @@ import { getUserFromAuthHeader } from './utils/auth.js';
 export const config = { runtime: 'edge' };
 
 const STRIPE_API = 'https://api.stripe.com/v1';
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+};
 
 /**
  * POST /api/stripe-portal
@@ -60,7 +63,7 @@ export default async function handler(req: Request) {
     .maybeSingle();
 
   if (subErr) {
-    logger.error('Failed to retrieve subscription for portal', new Error(subErr.message), { userId: user.id });
+    logger.error('Failed to retrieve subscription for portal', { userId: user.id, errorMessage: subErr.message });
     logResponse(500);
     return new Response(JSON.stringify({ error: 'Failed to retrieve subscription' }), { status: 500, headers: JSON_HEADERS });
   }
@@ -77,7 +80,7 @@ export default async function handler(req: Request) {
   try {
     const params = new URLSearchParams({
       customer: sub.stripe_customer_id,
-      return_url: `${appUrl}/dashboard`,
+      return_url: `${appUrl}/#/admin/dashboard`,
     });
 
     const res = await fetch(`${STRIPE_API}/billing_portal/sessions`, {

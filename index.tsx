@@ -1,16 +1,64 @@
 
 import './index.css';
-import React from 'react';
+import React, { Component, useEffect, type ErrorInfo, type PropsWithChildren } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import { getPublicFormSlugFromPath, getRouteContext } from './services/routingService';
+
+const AdminApp = React.lazy(() => import('./App'));
+const PublicFormApp = React.lazy(() => import('./PublicFormApp'));
+
+const isPublicFormPath = (path: string): boolean => {
+  return getPublicFormSlugFromPath(path) !== null;
+};
+
+const AppLoadingFallback: React.FC = () => (
+  <div role="status" aria-live="polite" className="flex items-center justify-center min-h-screen bg-slate-50">
+    <div className="text-center">
+      <span className="sr-only">Loading application...</span>
+      <div className="motion-safe:animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4" />
+      <p className="text-slate-500 font-semibold text-base">Loading...</p>
+    </div>
+  </div>
+);
+
+const RoutedApp: React.FC = () => {
+  const routeContext = getRouteContext();
+
+  useEffect(() => {
+    if (routeContext.subdomain !== 'root') {
+      return;
+    }
+
+    const hostnameParts = window.location.hostname.split('.').slice(-2);
+    const baseDomain = hostnameParts.join('.');
+    const targetUrl = `${window.location.protocol}//www.${baseDomain}${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(targetUrl);
+  }, [routeContext.subdomain]);
+
+  if (routeContext.subdomain === 'root') {
+    return null;
+  }
+
+  const path = window.location.pathname || '/';
+  const ActiveApp = isPublicFormPath(path) ? PublicFormApp : AdminApp;
+
+  return (
+    <React.Suspense fallback={<AppLoadingFallback />}>
+      <ActiveApp />
+    </React.Suspense>
+  );
+};
 
 interface ErrorBoundaryState {
   hasError: boolean;
   message: string;
 }
 
-class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBoundaryState> {
-  constructor(props: React.PropsWithChildren) {
+class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundaryState> {
+  declare state: ErrorBoundaryState;
+  declare props: PropsWithChildren;
+
+  constructor(props: PropsWithChildren) {
     super(props);
     this.state = { hasError: false, message: '' };
   }
@@ -20,12 +68,13 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
     return { hasError: true, message };
   }
 
-  componentDidCatch(error: unknown, info: React.ErrorInfo) {
+  componentDidCatch(error: unknown, info: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack);
   }
 
   render() {
     if (this.state.hasError) {
+      const showErrorDetails = import.meta.env.DEV;
       return (
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -40,13 +89,15 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
             An unexpected error occurred. Please refresh the page. If the problem persists,
             contact support.
           </p>
-          <pre style={{
-            background: '#1e293b', borderRadius: '0.5rem', padding: '1rem',
-            fontSize: '0.75rem', color: '#f87171', maxWidth: '600px',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: '1.5rem',
-          }}>
-            {this.state.message}
-          </pre>
+          {showErrorDetails && (
+            <pre style={{
+              background: '#1e293b', borderRadius: '0.5rem', padding: '1rem',
+              fontSize: '0.75rem', color: '#f87171', maxWidth: '600px',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: '1.5rem',
+            }}>
+              {this.state.message}
+            </pre>
+          )}
           <button
             onClick={() => window.location.reload()}
             style={{
@@ -73,7 +124,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <RoutedApp />
     </ErrorBoundary>
   </React.StrictMode>
 );

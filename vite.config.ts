@@ -18,6 +18,20 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [tailwindcss(), react()],
 
+      build: {
+        target: 'es2022',
+        sourcemap: false,
+        cssCodeSplit: true,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-react': ['react', 'react-dom'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+            },
+          },
+        },
+      },
+
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

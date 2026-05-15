@@ -1,8 +1,20 @@
 import { supabaseServer } from './_supabaseServer.js';
-import { checkRateLimit, createRateLimitResponse, getRateLimitKey, getUserIdFromRequest, RATE_LIMITS } from './utils/rateLimiter.js';
+import { checkRateLimit, createRateLimitResponse, getRateLimitKey, RATE_LIMITS } from './utils/rateLimiter.js';
 import { getUserFromAuthHeader } from './utils/auth.js';
 
 export const config = { runtime: 'edge' };
+
+const JSON_HEADERS: HeadersInit = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+};
+
+function capString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+}
 
 export default async function handler(req: Request) {
   const url = new URL(req.url);
@@ -10,25 +22,29 @@ export default async function handler(req: Request) {
   // POST - Record analytics event (no auth required for public events)
   if (req.method === 'POST') {
     // Rate limit analytics requests
-    const userId = await getUserIdFromRequest(req);
-    const key = getRateLimitKey(req, userId);
+    const key = getRateLimitKey(req);
     const rateLimitResult = checkRateLimit(key, RATE_LIMITS.ANALYTICS);
     
     if (!rateLimitResult.allowed) {
       return createRateLimitResponse(rateLimitResult);
     }
     
-    const body = await req.json();
-    const { formId, eventType, visitorEmail, visitorName, referrer, userAgent, metadata: rawMetadata } = body;
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: JSON_HEADERS });
+    }
+    const { formId, eventType, referrer, userAgent, metadata: rawMetadata } = body;
 
     if (!formId || !eventType) {
-      return new Response(JSON.stringify({ error: 'Missing formId or eventType' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing formId or eventType' }), { status: 400, headers: JSON_HEADERS });
     }
 
     // Validate event type
     const validEventTypes = ['visit', 'submit_start', 'submit_success', 'submit_error'];
     if (!validEventTypes.includes(eventType)) {
-      return new Response(JSON.stringify({ error: 'Invalid eventType' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Invalid eventType' }), { status: 400, headers: JSON_HEADERS });
     }
 
     // Sanitize metadata: must be a plain object, max 10 keys, values capped at 512 chars.
@@ -71,17 +87,17 @@ export default async function handler(req: Request) {
       .maybeSingle();
 
     if (formError || !formData) {
-      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: JSON_HEADERS });
     }
 
     // Create analytics record
     const analyticsRecord = {
       form_id: formId,
       event_type: eventType,
-      visitor_email: visitorEmail || null,
-      visitor_name: visitorName || null,
-      referrer: referrer || null,
-      user_agent: userAgent || null,
+      visitor_email: null,
+      visitor_name: null,
+      referrer: capString(referrer, 512),
+      user_agent: capString(userAgent, 512),
       metadata: metadata || null,
       created_at: new Date().toISOString()
     };
@@ -98,24 +114,30 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ 
         success: true, 
         warning: 'Analytics recording failed'
-      }), { status: 200 });
+      }), { status: 200, headers: JSON_HEADERS });
     }
 
-    return new Response(JSON.stringify({ success: true, id: data.id }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, id: data.id }), { status: 200, headers: JSON_HEADERS });
   }
 
   // GET - Retrieve analytics for a form (auth required)
   if (req.method === 'GET') {
     const user = await getUserFromAuthHeader(req);
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: JSON_HEADERS });
+    }
+
+    const rateLimitKey = getRateLimitKey(req, user.id);
+    const rateLimitResult = checkRateLimit(rateLimitKey, RATE_LIMITS.ANALYTICS);
+    if (!rateLimitResult.allowed) {
+      return createRateLimitResponse(rateLimitResult);
     }
 
     const formId = url.searchParams.get('formId');
     const timeWindow = url.searchParams.get('window') || 'all'; // 'day', 'week', 'month', 'all'
     
     if (!formId) {
-      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400, headers: JSON_HEADERS });
     }
     
     // Validate time window parameter
@@ -124,7 +146,7 @@ export default async function handler(req: Request) {
       return new Response(JSON.stringify({ 
         error: 'Invalid time window', 
         details: 'Must be one of: day, week, month, all' 
-      }), { status: 400 });
+      }), { status: 400, headers: JSON_HEADERS });
     }
 
     // Verify the form belongs to the user
@@ -136,7 +158,7 @@ export default async function handler(req: Request) {
       .maybeSingle();
 
     if (formError || !formData) {
-      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: JSON_HEADERS });
     }
 
     // Calculate time window boundaries in UTC
@@ -161,12 +183,6 @@ export default async function handler(req: Request) {
       aggregateQuery = aggregateQuery.gte('created_at', startDate.toISOString());
     }
 
-    const { data: allForSummary, error: summaryError } = await aggregateQuery;
-
-    if (summaryError) {
-      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
-    }
-
     // 2. Recent: latest 20 events (columns only)
     let recentQuery = supabaseServer
       .from('form_analytics')
@@ -179,10 +195,12 @@ export default async function handler(req: Request) {
       recentQuery = recentQuery.gte('created_at', startDate.toISOString());
     }
 
-    const { data: recentRows, error: recentError } = await recentQuery;
+    const [summaryResult, recentResult] = await Promise.all([aggregateQuery, recentQuery]);
+    const { data: allForSummary, error: summaryError } = summaryResult;
+    const { data: recentRows, error: recentError } = recentResult;
 
-    if (recentError) {
-      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    if (summaryError || recentError) {
+      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500, headers: JSON_HEADERS });
     }
 
     // Build summary from aggregate result
@@ -213,10 +231,10 @@ export default async function handler(req: Request) {
         conversionRate: Math.round(conversionRate * 100) / 100
       },
       recentEvents
-    }), { status: 200 });
+    }), { status: 200, headers: JSON_HEADERS });
   }
 
-  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: JSON_HEADERS });
 }
 
 /**

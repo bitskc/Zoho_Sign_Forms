@@ -163,7 +163,7 @@ describe('Rate Limiter', () => {
     it('should have correct config for Zoho API', () => {
       expect(RATE_LIMITS.ZOHO_API).toEqual({
         windowMs: 60 * 1000,
-        maxRequests: 20
+        maxRequests: 5
       });
     });
 
@@ -177,7 +177,7 @@ describe('Rate Limiter', () => {
     it('should have correct config for forms', () => {
       expect(RATE_LIMITS.FORMS).toEqual({
         windowMs: 60 * 1000,
-        maxRequests: 30
+        maxRequests: 60
       });
     });
 
@@ -191,21 +191,35 @@ describe('Rate Limiter', () => {
     it('should have correct config for analytics', () => {
       expect(RATE_LIMITS.ANALYTICS).toEqual({
         windowMs: 60 * 1000,
-        maxRequests: 10
+        maxRequests: 60
+      });
+    });
+
+    it('should have correct config for QR codes', () => {
+      expect(RATE_LIMITS.QRCODES).toEqual({
+        windowMs: 60 * 1000,
+        maxRequests: 20
+      });
+    });
+
+    it('should have correct config for QR redirects', () => {
+      expect(RATE_LIMITS.QR_REDIRECT).toEqual({
+        windowMs: 60 * 1000,
+        maxRequests: 120
       });
     });
 
     it('should enforce different limits for different endpoints', () => {
-      // Zoho API: 20 req/min
-      for (let i = 0; i < 20; i++) {
+      // Zoho API: 5 req/min
+      for (let i = 0; i < 5; i++) {
         const result = checkRateLimit('zoho-test', RATE_LIMITS.ZOHO_API);
         expect(result.allowed).toBe(true);
       }
       const zohoBlocked = checkRateLimit('zoho-test', RATE_LIMITS.ZOHO_API);
       expect(zohoBlocked.allowed).toBe(false);
 
-      // Forms: 30 req/min (different key)
-      for (let i = 0; i < 30; i++) {
+      // Forms: 60 req/min (different key)
+      for (let i = 0; i < 60; i++) {
         const result = checkRateLimit('forms-test', RATE_LIMITS.FORMS);
         expect(result.allowed).toBe(true);
       }

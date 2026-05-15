@@ -36,26 +36,31 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
   // (the modal renders via createPortal into document.body, outside #root entirely).
   // On close: restore focus and remove inert.
   useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement;
-      // Apply `inert` to all direct children of <body> except the portal container
-      // (which is appended to body by createPortal). The portal node is the last child.
-      const bodyChildren = Array.from(document.body.children);
-      bodyChildren.forEach((el) => {
-        if (el !== modalRef.current?.closest('[data-modal-portal]')) {
-          (el as HTMLElement).setAttribute('inert', '');
-        }
-      });
-      // Defer focus to ensure the modal is in the DOM
-      requestAnimationFrame(() => closeButtonRef.current?.focus());
-    } else {
-      // Remove inert from all body children
+    const restoreBackground = () => {
       Array.from(document.body.children).forEach((el) => {
         (el as HTMLElement).removeAttribute('inert');
       });
       const prev = previousFocusRef.current as HTMLElement | null;
       if (prev?.focus) prev.focus();
+    };
+
+    if (!isOpen) {
+      restoreBackground();
+      return;
     }
+
+    previousFocusRef.current = document.activeElement;
+    // Apply `inert` to all direct children of <body> except the portal container.
+    const bodyChildren = Array.from(document.body.children);
+    bodyChildren.forEach((el) => {
+      if (el !== modalRef.current?.closest('[data-modal-portal]')) {
+        (el as HTMLElement).setAttribute('inert', '');
+      }
+    });
+    // Defer focus to ensure the modal is in the DOM.
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    return restoreBackground;
   }, [isOpen]);
 
   const handleClose = useCallback(() => {
@@ -75,8 +80,8 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, url, formNam
     const focusable = Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
     if (focusable.length === 0) return;
 
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    const first = focusable[0] as HTMLElement;
+    const last = focusable[focusable.length - 1] as HTMLElement;
 
     if (e.shiftKey) {
       if (document.activeElement === first) {

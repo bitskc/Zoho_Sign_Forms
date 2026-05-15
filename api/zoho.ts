@@ -13,10 +13,26 @@ export const config = {
   runtime: 'edge',
 };
 
+const JSON_NO_STORE_HEADERS: HeadersInit = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+};
+
+const OAUTH_TIMEOUT_MS = 10_000;
+const ZOHO_API_TIMEOUT_MS = 15_000;
+
+function jsonResponse(status: number, payload: Record<string, unknown>, headers?: HeadersInit) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      ...JSON_NO_STORE_HEADERS,
+      ...(headers || {}),
+    },
+  });
+}
+
 /**
  * Maps a validated Zoho Sign hostname to its corresponding Zoho Accounts OAuth URL.
- * NOTE: apiDomain is validated against the allowlist before this function is called,
- * so the derived accountsUrl is implicitly safe.
  */
 function getAccountsUrl(apiDomain: string) {
   if (apiDomain.includes('.eu')) return 'https://accounts.zoho.eu';
@@ -26,28 +42,38 @@ function getAccountsUrl(apiDomain: string) {
   return 'https://accounts.zoho.com';
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function getOAuthToken(params: URLSearchParams, apiDomain: string) {
   const accountsUrl = `${getAccountsUrl(apiDomain)}/oauth/v2/token`;
 
-  const response = await fetch(accountsUrl, {
+  const response = await fetchWithTimeout(accountsUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
     },
     body: params,
-  });
+  }, OAUTH_TIMEOUT_MS);
 
-  const data = await response.json();
-  if (!response.ok || data.error) {
-    throw new Error(data.error_description || data.error || 'OAuth Request Failed');
+  const data = await response.json().catch(() => ({} as Record<string, unknown>));
+  if (!response.ok || (data as any).error) {
+    const message = (data as any).error_description || (data as any).error || 'OAuth Request Failed';
+    throw new Error(String(message));
   }
-  return data;
+  return data as Record<string, unknown>;
 }
 
 export default async function handler(req: Request) {
   const { logger, logResponse } = createRequestLogger(req);
 
-  // Periodic cleanup
   if (Math.random() < 0.01) {
     cleanupRateLimitStore();
   }
@@ -56,26 +82,38 @@ export default async function handler(req: Request) {
     logResponse(405);
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Allow': 'POST' }
+      headers: {
+        ...JSON_NO_STORE_HEADERS,
+        'Allow': 'POST',
+      },
     });
   }
 
   try {
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      logResponse(400);
+      return jsonResponse(400, { error: 'Invalid JSON body' });
+    }
+
     const { action, apiDomain, clientId, clientSecret, refreshToken, grantToken, redirectUri } = body;
-    // NOTE: `userId` is intentionally NOT destructured from body — it must never be
-    // trusted from the client. The server resolves the form owner from the database.
 
     logger.debug('Request body received', sanitizeLogContext({
       action,
       apiDomain,
       clientId: clientId ? '[PROVIDED]' : '[ENV]',
       clientSecret: clientSecret ? '[PROVIDED]' : '[ENV]',
-      templateId: body.templateId?.slice(0, 8),
+      formId: body.formId,
+      slug: body.slug,
+      templateId: body.templateId?.slice?.(0, 8),
     }));
 
-    // Apply rate limiting (IP-based for untrusted requests)
-    const rateLimitKey = getRateLimitKey(req);
+    const routeLimitId = action === 'exchange'
+      ? 'exchange'
+      : (body.formId || body.slug || body.templateId || 'unknown');
+    const rateLimitKey = `${getRateLimitKey(req)}:zoho:${routeLimitId}`;
     const rateLimitCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.ZOHO_API);
 
     if (!rateLimitCheck.allowed) {
@@ -94,22 +132,29 @@ export default async function handler(req: Request) {
     if (action === 'exchange') {
       logger.info('Processing OAuth token exchange');
 
-      // Validate apiDomain before using it in fetch (P1-01: SSRF prevention)
       let cleanExchangeDomain: string;
       try {
         cleanExchangeDomain = validateZohoDomain(apiDomain || 'sign.zoho.com');
       } catch (e) {
         if (e instanceof DomainValidationError) {
           logResponse(400);
-          return new Response(JSON.stringify({ error: 'Invalid API domain' }), { status: 400 });
+          return jsonResponse(400, { error: 'Invalid API domain' });
         }
         throw e;
       }
 
+      if (!grantToken || !resolvedClientId || !resolvedClientSecret) {
+        logResponse(400);
+        return jsonResponse(400, {
+          error: 'Missing data',
+          message: 'grantToken, clientId, and clientSecret are required for exchange.',
+        });
+      }
+
       const params = new URLSearchParams();
       params.append('code', grantToken);
-      params.append('client_id', resolvedClientId || '');
-      params.append('client_secret', resolvedClientSecret || '');
+      params.append('client_id', resolvedClientId);
+      params.append('client_secret', resolvedClientSecret);
       params.append('redirect_uri', redirectUri || 'https://api-console.zoho.com');
       params.append('grant_type', 'authorization_code');
 
@@ -117,33 +162,18 @@ export default async function handler(req: Request) {
         const data = await getOAuthToken(params, cleanExchangeDomain);
         logger.info('OAuth token exchange successful');
         logResponse(200, { action: 'exchange' });
-        return new Response(JSON.stringify(data), { status: 200 });
+        return jsonResponse(200, data as Record<string, unknown>);
       } catch (e: any) {
         logger.error('OAuth token exchange failed', e);
         logResponse(400, { action: 'exchange' });
-        return new Response(JSON.stringify({ error: e.message }), { status: 400 });
+        return jsonResponse(400, { error: e.message });
       }
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { templateId, signer, roleName, isTest, accessToken: providedAccessToken,
+    const { formId, slug, templateId, signer, roleName, isTest, accessToken: providedAccessToken,
       clientId: providedClientId, clientSecret: providedClientSecret } = body;
 
-    // P1-01: Validate apiDomain against allowlist before any further use.
-    // Default to sign.zoho.com if not provided.
-    let cleanDomain: string;
-    try {
-      cleanDomain = validateZohoDomain((apiDomain || 'sign.zoho.com').replace(/\/+$/, '').trim());
-    } catch (e) {
-      if (e instanceof DomainValidationError) {
-        logResponse(400);
-        return new Response(JSON.stringify({ error: 'Invalid API domain' }), { status: 400 });
-      }
-      throw e;
-    }
-
-    // P1-02: Determine the form owner server-side — never trust userId from request body.
-    // Check if this is an authenticated admin/test request.
     const authHeader = req.headers.get('Authorization');
     let authedUserId: string | null = null;
     if (authHeader?.startsWith('Bearer ')) {
@@ -154,79 +184,143 @@ export default async function handler(req: Request) {
       }
     }
 
-    let effectiveClientId = providedClientId || resolvedClientId;
-    let effectiveClientSecret = providedClientSecret || resolvedClientSecret;
-    let effectiveRefreshToken = refreshToken;
+    if (!formId && !slug && !templateId) {
+      logResponse(400);
+      return jsonResponse(400, {
+        error: 'Missing data',
+        message: authedUserId
+          ? 'One of formId, slug, or templateId is required.'
+          : 'Public signing requests require formId and slug.',
+      });
+    }
 
-    // Load credentials from database via templateId lookup (not userId from body)
-    if (!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken) {
-      if (!templateId) {
-        return new Response(JSON.stringify({
-          error: 'Missing data',
-          message: 'templateId is required.'
-        }), { status: 400 });
-      }
+    if (!authedUserId && (!formId || !slug)) {
+      logResponse(400);
+      return jsonResponse(400, {
+        error: 'Missing form identity',
+        message: 'Public signing requests require formId and slug.',
+      });
+    }
 
-      // Resolve form owner from templateId
-      const { data: formRow, error: formErr } = await supabaseServer
+    // Resolve form/owner from formId or slug. Authenticated test calls may use templateId for compatibility.
+    let formRow: { id: string; user_id: string; slug: string; template_id: string; role_name: string; api_domain: string | null } | null = null;
+
+    if (formId) {
+      const { data, error } = await supabaseServer
         .from('forms')
-        .select('user_id')
+        .select('id,user_id,slug,template_id,role_name,api_domain')
+        .eq('id', formId)
+        .maybeSingle();
+      if (!error && data) {
+        formRow = data;
+      }
+    } else if (slug) {
+      const { data, error } = await supabaseServer
+        .from('forms')
+        .select('id,user_id,slug,template_id,role_name,api_domain')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (!error && data) {
+        formRow = data;
+      }
+    } else if (templateId && authedUserId) {
+      const { data, error } = await supabaseServer
+        .from('forms')
+        .select('id,user_id,slug,template_id,role_name,api_domain')
         .eq('template_id', templateId)
         .limit(1)
         .maybeSingle();
-
-      if (formErr || !formRow) {
-        logger.warn('Form not found for templateId', { templateId: templateId?.slice(0, 8) });
-        logResponse(404);
-        return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+      if (!error && data) {
+        formRow = data;
       }
+    }
 
-      const resolvedUserId = formRow.user_id;
+    if (!formRow) {
+      logger.warn('Form not found for sign request', {
+        formId,
+        slug,
+        templateId: templateId?.slice?.(0, 8),
+      });
+      logResponse(404);
+      return jsonResponse(404, { error: 'Form not found' });
+    }
 
-      // If authenticated, verify the caller owns this form
-      if (authedUserId && authedUserId !== resolvedUserId) {
-        logResponse(403);
-        return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
+    if (authedUserId && authedUserId !== formRow.user_id) {
+      logResponse(403);
+      return jsonResponse(403, { error: 'Forbidden' });
+    }
+
+    if (formId && slug && formRow.slug !== slug) {
+      logResponse(404);
+      return jsonResponse(404, { error: 'Form not found' });
+    }
+
+    const allowClientOverrides = Boolean(authedUserId && authedUserId === formRow.user_id);
+    const isPublicSubmit = !allowClientOverrides;
+    const cleanTemplateId = ((allowClientOverrides ? templateId : undefined) || formRow.template_id || '').trim();
+    const cleanRoleName = ((allowClientOverrides ? roleName : undefined) || formRow.role_name || 'Signer 1').trim();
+
+    if (!cleanTemplateId || !signer?.name || !signer?.email) {
+      logResponse(400);
+      return jsonResponse(400, {
+        error: 'Missing data',
+        message: 'signer.name, signer.email, and server-side form template configuration are required.',
+      });
+    }
+
+    let cleanDomain = 'https://sign.zoho.com';
+    try {
+      if (allowClientOverrides && apiDomain) {
+        cleanDomain = validateZohoDomain(String(apiDomain).replace(/\/+$/, '').trim());
+      } else if (formRow.api_domain) {
+        cleanDomain = validateZohoDomain(String(formRow.api_domain).replace(/\/+$/, '').trim());
       }
+    } catch (e) {
+      if (e instanceof DomainValidationError) {
+        logResponse(400);
+        return jsonResponse(400, { error: 'Invalid API domain' });
+      }
+      throw e;
+    }
 
+    let effectiveClientId = allowClientOverrides ? (providedClientId || resolvedClientId) : undefined;
+    let effectiveClientSecret = allowClientOverrides ? (providedClientSecret || resolvedClientSecret) : undefined;
+    let effectiveRefreshToken = allowClientOverrides ? refreshToken : undefined;
+
+    if (!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken) {
       const { data: credRow, error: credErr } = await supabaseServer
         .from('user_credentials')
         .select('zoho_client_id,zoho_client_secret,zoho_refresh_token,api_domain')
-        .eq('user_id', resolvedUserId)
+        .eq('user_id', formRow.user_id)
         .maybeSingle();
 
       if (!credErr && credRow) {
         effectiveClientId = effectiveClientId || credRow.zoho_client_id;
         effectiveClientSecret = effectiveClientSecret || credRow.zoho_client_secret;
         effectiveRefreshToken = effectiveRefreshToken || credRow.zoho_refresh_token;
-        // Only use stored apiDomain if none was provided (already validated above)
-        if (!apiDomain && credRow.api_domain) {
+        if (!(allowClientOverrides && apiDomain) && !formRow.api_domain && credRow.api_domain) {
           try {
             cleanDomain = validateZohoDomain(credRow.api_domain);
           } catch {
-            // Keep the default cleanDomain if stored value is invalid
+            // keep previous validated domain
           }
         }
       }
     }
 
-    if (!providedAccessToken && (!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken)) {
-      return new Response(JSON.stringify({
+    const clientProvidedAccessToken = allowClientOverrides ? providedAccessToken : undefined;
+    if (!clientProvidedAccessToken && (!effectiveClientId || !effectiveClientSecret || !effectiveRefreshToken)) {
+      logResponse(400);
+      return jsonResponse(400, isPublicSubmit ? {
+        error: 'Signing unavailable',
+        message: 'We could not prepare this document. Please try again or contact the sender.',
+      } : {
         error: 'Missing credentials',
-        message: 'clientId/clientSecret must be set on the server and refreshToken provided unless you pass accessToken.'
-      }), { status: 400 });
-    }
-    if (!templateId || !signer?.name || !signer?.email) {
-      return new Response(JSON.stringify({
-        error: 'Missing data',
-        message: 'templateId, signer.name, and signer.email are required.'
-      }), { status: 400 });
+        message: 'Server-side Zoho credentials are missing for this form owner.',
+      });
     }
 
-    const cleanTemplateId = (templateId || '').trim();
-    const cleanRoleName = (roleName || "Signer 1").trim();
-
-    let accessToken: string | undefined = providedAccessToken;
+    let accessToken: string | undefined = clientProvidedAccessToken;
     if (!accessToken) {
       const refreshParams = new URLSearchParams();
       refreshParams.append('refresh_token', effectiveRefreshToken);
@@ -236,33 +330,47 @@ export default async function handler(req: Request) {
 
       try {
         const authData = await getOAuthToken(refreshParams, cleanDomain);
-        accessToken = authData.access_token;
-      } catch (authError: any) {
-        return new Response(JSON.stringify({
+        accessToken = String(authData.access_token || '');
+      } catch {
+        logResponse(401);
+        return jsonResponse(401, isPublicSubmit ? {
+          error: 'Signing unavailable',
+          message: 'We could not prepare this document. Please try again or contact the sender.',
+        } : {
           error: 'Authentication Failure',
-          message: 'OAuth token refresh failed. Check your Client ID, Client Secret, and Refresh Token.',
-          hint: "Your Refresh Token might be invalid or your Client ID/Secret do not match."
-        }), { status: 401 });
+          message: 'OAuth token refresh failed. Check your server-side Zoho credentials.',
+        });
       }
     }
 
-    // Fetch template to resolve the correct action_id for the requested role
-    const templateInfo = await fetch(`${cleanDomain}/api/v1/templates/${cleanTemplateId}`, {
+    const templateInfo = await fetchWithTimeout(`${cleanDomain}/api/v1/templates/${cleanTemplateId}`, {
       method: 'GET',
       headers: { 'Authorization': `Zoho-oauthtoken ${accessToken}` }
-    });
+    }, ZOHO_API_TIMEOUT_MS);
+
     if (!templateInfo.ok) {
-      const txt = await templateInfo.text();
-      return new Response(JSON.stringify({ error: 'Template fetch failed', message: txt }), { status: 400 });
+      logResponse(400, { stage: 'template_lookup', zohoStatus: templateInfo.status });
+      return jsonResponse(400, isPublicSubmit ? {
+        error: 'Signing unavailable',
+        message: 'We could not prepare this document. Please try again or contact the sender.',
+      } : {
+        error: 'Template fetch failed',
+        message: `Zoho template lookup failed with status ${templateInfo.status}`,
+      });
     }
-    const templateData = await templateInfo.json();
-    const actions = templateData?.templates?.actions || [];
+
+    const templateData = await templateInfo.json().catch(() => ({}));
+    const actions = (templateData as any)?.templates?.actions || [];
     const matchedAction = actions.find((a: any) => (a.role || '').trim().toLowerCase() === cleanRoleName.toLowerCase());
     if (!matchedAction?.action_id) {
-      return new Response(JSON.stringify({
+      logResponse(400, { stage: 'role_lookup' });
+      return jsonResponse(400, isPublicSubmit ? {
+        error: 'Signing unavailable',
+        message: 'We could not prepare this document. Please try again or contact the sender.',
+      } : {
         error: 'Role not found',
-        message: `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`
-      }), { status: 400 });
+        message: `The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`,
+      });
     }
 
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
@@ -274,7 +382,7 @@ export default async function handler(req: Request) {
           {
             recipient_name: signer.name,
             recipient_email: signer.email,
-            action_type: "SIGN",
+            action_type: 'SIGN',
             action_id: matchedAction.action_id,
             role: matchedAction.role,
             verify_recipient: false,
@@ -283,37 +391,40 @@ export default async function handler(req: Request) {
         ],
         field_data: {
           field_text_data: {
-            "Signer Name": signer.name,
-            "Full Name": signer.name,
-            "Name": signer.name
+            'Signer Name': signer.name,
+            'Full Name': signer.name,
+            'Name': signer.name
           }
         },
-        notes: "Generated via SignFlow Pro - direct link"
+        notes: 'Generated via SignFlow Pro - direct link'
       }
     };
 
-    const response = await fetch(endpoint, {
+    const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Zoho-oauthtoken ${accessToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
-    });
+    }, ZOHO_API_TIMEOUT_MS);
 
     const responseText = await response.text();
-    let data;
+    let data: any;
     try {
       data = JSON.parse(responseText);
-    } catch (e) {
-      data = { error: "Non-JSON Response", raw: responseText };
+    } catch {
+      data = {
+        error: 'Zoho Response Parse Failure',
+        message: `Zoho returned non-JSON response with status ${response.status}`,
+      };
     }
 
-    if (response.status === 400 && responseText.includes("action_id")) {
+    if (response.status === 400 && responseText.includes('action_id')) {
       data.debug_hint = `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`;
     }
 
-    // For embedded signing, make the embedtoken API call to get the proper signing URL
+    // For embedded signing, call embedtoken endpoint to get final signing URL.
     if (response.ok && data.requests) {
       const request = data.requests;
       const respActions = request?.actions || [];
@@ -324,35 +435,56 @@ export default async function handler(req: Request) {
         const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
 
         try {
-          const embedResponse = await fetch(embedUrl, {
+          const embedResponse = await fetchWithTimeout(embedUrl, {
             method: 'POST',
             headers: {
               'Authorization': `Zoho-oauthtoken ${accessToken}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ host })
-          });
+          }, ZOHO_API_TIMEOUT_MS);
 
           if (embedResponse.ok) {
             const embedData = await embedResponse.json();
             if (embedData.sign_url) {
               action.signing_url = embedData.sign_url;
             }
+          } else {
+            logger.warn('Embed token request failed; continuing with email fallback', {
+              zohoStatus: embedResponse.status,
+              requestId: request.request_id,
+            });
           }
         } catch (embedError) {
-          // Silently continue — user will receive email link instead
+          logger.warn('Embed token request threw; continuing with email fallback', {
+            requestId: request.request_id,
+            error: embedError instanceof Error ? embedError.message : String(embedError),
+          });
         }
+      }
+
+      if (isPublicSubmit) {
+        logResponse(response.status, { stage: 'zoho_submit' });
+        return jsonResponse(response.status, {
+          requestId: request?.request_id,
+          signingUrl: action?.signing_url,
+        });
       }
     }
 
-    return new Response(JSON.stringify(data), {
+    logResponse(response.status, { stage: 'zoho_submit' });
+    return new Response(JSON.stringify(isPublicSubmit && !response.ok ? {
+      error: 'Signing unavailable',
+      message: 'We could not prepare this document. Please try again or contact the sender.',
+    } : data), {
       status: response.status,
-      headers: { 'Content-Type': 'application/json' }
+      headers: JSON_NO_STORE_HEADERS,
     });
-  } catch (error) {
-    return new Response(JSON.stringify({
+  } catch {
+    logResponse(500);
+    return jsonResponse(500, {
       error: 'Internal Server Error',
       message: 'An unexpected error occurred. Please try again.'
-    }), { status: 500 });
+    });
   }
 }

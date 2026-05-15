@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getSubdomainType, getRouteContext, buildFormUrl } from '../services/routingService';
+import {
+  getSubdomainType,
+  getRouteContext,
+  buildFormUrl,
+  getPublicFormSlugFromPath,
+  isValidPublicFormSlug,
+} from '../services/routingService';
 
 // Helper to mock window.location in a controlled way
 function mockLocation(url: string) {
@@ -59,6 +65,32 @@ describe('routingService.getRouteContext', () => {
     const ctx = getRouteContext();
     expect(ctx.isFormSlug).toBe(false);
     expect(ctx.formSlug).toBeNull();
+  });
+
+  it('does not treat reserved paths as form slugs', () => {
+    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc']) {
+      mockLocation(`https://www.signflow.ink${path}`);
+      const ctx = getRouteContext();
+      expect(ctx.isFormSlug).toBe(false);
+      expect(ctx.formSlug).toBeNull();
+    }
+  });
+});
+
+describe('routingService public form slug helpers', () => {
+  it('accepts only single-segment public form slugs', () => {
+    expect(getPublicFormSlugFromPath('/fbmc')).toBe('fbmc');
+    expect(getPublicFormSlugFromPath('/fbmc/')).toBe('fbmc');
+    expect(getPublicFormSlugFromPath('/fbmc/extra')).toBeNull();
+    expect(getPublicFormSlugFromPath('/')).toBeNull();
+  });
+
+  it('rejects invalid and reserved public form slugs', () => {
+    expect(isValidPublicFormSlug('fbmc-short')).toBe(true);
+    expect(isValidPublicFormSlug('BadSlug')).toBe(false);
+    expect(isValidPublicFormSlug('admin')).toBe(false);
+    expect(isValidPublicFormSlug('qr')).toBe(false);
+    expect(isValidPublicFormSlug('favicon.ico')).toBe(false);
   });
 });
 
