@@ -247,6 +247,11 @@ const App: React.FC = () => {
       if (!res.ok) {
         if (res.status === 401) {
           console.warn('Forms API unauthorized (401) - session may have expired');
+          // 401 is definitive — do not retry until the user re-authenticates.
+        } else {
+          // Transient error (5xx, network hiccup, etc.) — allow a future retry.
+          console.warn(`Forms API error (${res.status}) - will allow retry`);
+          setFormsFetchAttempted(false);
         }
         setForms([]);
         return;
