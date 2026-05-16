@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   aliases: [
     { form_id: 'form-1', old_slug: 'old-form' },
   ] as any[],
+  selectedColumns: [] as string[],
+  failPublicSelectForIds: new Set<string>(),
 }));
 
 const makeQueryBuilder = (table: string) => {
@@ -29,7 +31,10 @@ const makeQueryBuilder = (table: string) => {
   const matchesFilters = (row: any) => Object.entries(filters).every(([key, value]) => row[key] === value);
 
   const builder: any = {
-    select: () => builder,
+    select: (columns: string) => {
+      state.selectedColumns.push(columns);
+      return builder;
+    },
     eq: (column: string, value: unknown) => {
       filters[column] = value;
       return builder;
@@ -66,6 +71,13 @@ const makeQueryBuilder = (table: string) => {
         }
 
         if (upsertPayload) return { data: upsertPayload, error: null };
+
+        const selectedId = filters.id;
+        if (typeof selectedId === 'string' && state.failPublicSelectForIds.has(selectedId)) {
+          if (state.selectedColumns[state.selectedColumns.length - 1]?.includes('landing_config')) {
+            return { data: null, error: { message: 'column landing_config does not exist' } };
+          }
+        }
 
         const row = state.forms.find(matchesFilters);
         return { data: row || null, error: null };
@@ -116,6 +128,8 @@ describe('/api/forms slug aliases', () => {
       },
     ];
     state.aliases = [{ form_id: 'form-1', old_slug: 'old-form' }];
+    state.selectedColumns = [];
+    state.failPublicSelectForIds = new Set();
   });
 
   it('loads a public form through a historical slug alias', async () => {
@@ -147,5 +161,51 @@ describe('/api/forms slug aliases', () => {
     expect(res.status).toBe(200);
     expect(state.forms[0].slug).toBe('new-form');
     expect(state.aliases).toContainEqual({ form_id: 'form-1', old_slug: 'current-form' });
+  });
+
+  it('uses the public select fallback when loading a historical slug alias', async () => {
+    state.failPublicSelectForIds = new Set(['form-1']);
+
+    const res = await formsHandler(new Request('https://www.signflow.ink/api/forms?slug=old-form'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.id).toBe('form-1');
+    expect(body.slug).toBe('current-form');
+    expect(state.selectedColumns).toContain('id,name,slug');
+  });
+
+  it('does not block non-slug updates because of another form alias', async () => {
+    state.forms.push({
+      id: 'form-2',
+      user_id: 'user-1',
+      name: 'Second Form',
+      slug: 'second-form',
+      template_id: 'tpl-2',
+      role_name: 'Signer 1',
+      api_domain: 'https://sign.zoho.com',
+      created_at: '2026-01-02T00:00:00.000Z',
+      landing_config: null,
+    });
+    state.aliases.push({ form_id: 'form-2', old_slug: 'current-form' });
+
+    const res = await formsHandler(new Request('https://www.signflow.ink/api/forms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer test-token',
+      },
+      body: JSON.stringify({
+        id: 'form-1',
+        name: 'Renamed Only',
+        slug: 'current-form',
+        templateId: 'tpl',
+        roleName: 'Signer 1',
+        apiDomain: 'https://sign.zoho.com',
+      }),
+    }));
+
+    expect(res.status).toBe(200);
+    expect(state.forms[0].name).toBe('Renamed Only');
   });
 });

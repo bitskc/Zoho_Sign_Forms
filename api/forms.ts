@@ -15,7 +15,7 @@ const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', '
 const PUBLIC_FORM_SELECT = 'id,name,slug,landing_config';
 const PRIVATE_FORM_SELECT = `
   id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,
-  form_qrcodes(qr_code_data, stable_id, created_at)
+  form_qrcodes(stable_id, created_at)
 `;
 
 function isValidSlug(slug: unknown): slug is string {
@@ -25,7 +25,15 @@ function isValidSlug(slug: unknown): slug is string {
 }
 
 function isMissingSlugAliasTableError(error: any): boolean {
-  return error?.code === '42P01' || String(error?.message || '').includes('form_slug_aliases');
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === '42P01'
+    || message.includes('relation "form_slug_aliases" does not exist')
+    || message.includes("could not find the table 'form_slug_aliases'")
+    || message.includes("could not find the table 'public.form_slug_aliases'");
+}
+
+function isMissingPublicFormColumnError(error: any): boolean {
+  return String(error?.message || '').includes('landing_config');
 }
 
 async function findSlugAlias(oldSlug: string): Promise<{ data: { form_id: string } | null; error: any }> {
@@ -40,6 +48,24 @@ async function findSlugAlias(oldSlug: string): Promise<{ data: { form_id: string
   }
 
   return { data, error };
+}
+
+async function findPublicFormBy(column: 'slug' | 'id', value: string) {
+  const result = await supabaseServer
+    .from('forms')
+    .select(PUBLIC_FORM_SELECT)
+    .eq(column, value)
+    .maybeSingle();
+
+  if (result.error && isMissingPublicFormColumnError(result.error)) {
+    return supabaseServer
+      .from('forms')
+      .select('id,name,slug')
+      .eq(column, value)
+      .maybeSingle();
+  }
+
+  return result;
 }
 
 function toCamel(record: any, options?: { publicView?: boolean }) {
@@ -120,24 +146,9 @@ export default async function handler(req: Request) {
       // Try by current slug first, then by historical slug alias for old QR/shared URLs.
       let data, error;
       try {
-        const result = await supabaseServer
-          .from(table)
-          .select(PUBLIC_FORM_SELECT)
-          .eq('slug', slug)
-          .maybeSingle();
+        const result = await findPublicFormBy('slug', slug);
         data = result.data;
         error = result.error;
-        
-        // If error mentions landing_config or form_qrcodes columns, retry without them
-        if (error?.message?.includes('landing_config') || error?.message?.includes('form_qrcodes')) {
-          const fallbackResult = await supabaseServer
-            .from(table)
-              .select('id,name,slug')
-            .eq('slug', slug)
-            .maybeSingle();
-          data = fallbackResult.data;
-          error = fallbackResult.error;
-        }
 
         if (!error && !data) {
           const aliasResult = await findSlugAlias(slug);
@@ -146,11 +157,7 @@ export default async function handler(req: Request) {
           }
 
           if (aliasResult.data?.form_id) {
-            const aliasFormResult = await supabaseServer
-              .from(table)
-              .select(PUBLIC_FORM_SELECT)
-              .eq('id', aliasResult.data.form_id)
-              .maybeSingle();
+            const aliasFormResult = await findPublicFormBy('id', aliasResult.data.form_id);
             data = aliasFormResult.data;
             error = aliasFormResult.error;
           }
@@ -300,13 +307,16 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: PRIVATE_JSON_HEADERS });
       }
       const previousSlug = existingForm.slug;
+      const isSlugChange = previousSlug !== body.slug;
 
-      const aliasForNewSlug = await findSlugAlias(body.slug);
-      if (aliasForNewSlug.error) {
-        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500, headers: PRIVATE_JSON_HEADERS });
-      }
-      if (aliasForNewSlug.data && aliasForNewSlug.data.form_id !== body.id) {
-        return new Response(JSON.stringify({ error: 'A form with this slug already exists' }), { status: 409, headers: PRIVATE_JSON_HEADERS });
+      if (isSlugChange) {
+        const aliasForNewSlug = await findSlugAlias(body.slug);
+        if (aliasForNewSlug.error) {
+          return new Response(JSON.stringify({ error: 'Database error' }), { status: 500, headers: PRIVATE_JSON_HEADERS });
+        }
+        if (aliasForNewSlug.data && aliasForNewSlug.data.form_id !== body.id) {
+          return new Response(JSON.stringify({ error: 'A form with this slug already exists' }), { status: 409, headers: PRIVATE_JSON_HEADERS });
+        }
       }
 
       // UPDATE existing form — id must already exist and belong to this user
@@ -339,7 +349,7 @@ export default async function handler(req: Request) {
         return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: PRIVATE_JSON_HEADERS });
       }
 
-      if (previousSlug !== body.slug) {
+      if (isSlugChange) {
         const { error: aliasError } = await supabaseServer
           .from('form_slug_aliases')
           .upsert({ form_id: body.id, old_slug: previousSlug }, { onConflict: 'old_slug' })

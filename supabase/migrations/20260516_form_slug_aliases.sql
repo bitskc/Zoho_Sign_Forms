@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS form_slug_aliases (
 );
 
 CREATE INDEX IF NOT EXISTS idx_form_slug_aliases_form_id ON form_slug_aliases(form_id);
-CREATE INDEX IF NOT EXISTS idx_form_slug_aliases_old_slug ON form_slug_aliases(old_slug);
 
 ALTER TABLE form_slug_aliases ENABLE ROW LEVEL SECURITY;
 

@@ -14,7 +14,11 @@ export const config = {
 };
 
 function isMissingSlugAliasTableError(error: any): boolean {
-  return error?.code === '42P01' || String(error?.message || '').includes('form_slug_aliases');
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === '42P01'
+    || message.includes('relation "form_slug_aliases" does not exist')
+    || message.includes("could not find the table 'form_slug_aliases'")
+    || message.includes("could not find the table 'public.form_slug_aliases'");
 }
 
 async function slugBelongsToForm(formId: string, slug: string): Promise<boolean> {
