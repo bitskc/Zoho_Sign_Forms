@@ -46,6 +46,7 @@ export interface FormDefinition {
   qrCodeData?: string; // URL to QR code image (e.g., https://api.qrserver.com/...)
   qrStableIdFromDb?: string; // Raw stable ID loaded from the database (used for sync/migrations)
   qrCreatedAt?: string; // QR code creation timestamp
+  requestedSlug?: string; // Public URL slug used to load this form, including historical aliases
 }
 
 export interface UserCredentials {

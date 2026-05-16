@@ -12,6 +12,9 @@ const state = vi.hoisted(() => ({
       api_domain: 'https://sign.zoho.com',
     },
   ],
+  formSlugAliases: [
+    { form_id: 'form-1', old_slug: 'old-fbmc' },
+  ],
   credentials: null as null | {
     zoho_client_id: string;
     zoho_client_secret: string;
@@ -36,6 +39,10 @@ const makeQueryBuilder = (table: string) => {
       }
       if (table === 'user_credentials') {
         return { data: state.credentials, error: null };
+      }
+      if (table === 'form_slug_aliases') {
+        const row = state.formSlugAliases.find(alias => Object.entries(filters).every(([key, value]) => (alias as any)[key] === value));
+        return { data: row || null, error: null };
       }
       return { data: null, error: null };
     }),
@@ -121,6 +128,40 @@ describe('/api/zoho', () => {
     const res = await handler(req);
 
     expect(res.status).toBe(404);
+  });
+
+  it('allows public submit requests from historical slug aliases', async () => {
+    state.credentials = {
+      zoho_client_id: 'stored-client',
+      zoho_client_secret: 'stored-secret',
+      zoho_refresh_token: 'stored-refresh',
+    };
+
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'oauth-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        templates: { actions: [{ role: 'Employee', action_id: 'action-1' }] }
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        requests: { request_id: 'request-1', actions: [{ action_id: 'action-2' }] }
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sign_url: 'https://sign.example/embedded' }), { status: 200 }))
+    );
+
+    const req = new Request('http://localhost/api/zoho', {
+      method: 'POST',
+      body: JSON.stringify({
+        formId: 'form-1',
+        slug: 'old-fbmc',
+        signer: { name: 'A', email: 'a@test.com' },
+      })
+    });
+
+    const res = await handler(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ requestId: 'request-1', signingUrl: 'https://sign.example/embedded' });
   });
 
   it('returns a minimal public success response and ignores public client overrides', async () => {

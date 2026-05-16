@@ -44,7 +44,7 @@ export const triggerZohoSignTemplate = async (
 
     const payload: Record<string, unknown> = {
       formId: form.id,
-      slug: form.slug,
+      slug: form.requestedSlug || form.slug,
       signer,
       isTest,
     };
