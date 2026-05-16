@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
     { form_id: 'form-legacy', stable_id: 'qr-legacy' },
   ],
   tableErrors: {} as Record<string, { message: string } | null>,
+  formErrorsById: {} as Record<string, { message: string } | null>,
 }));
 
 const makeQueryBuilder = (table: string) => {
@@ -25,6 +26,11 @@ const makeQueryBuilder = (table: string) => {
       }
 
       if (table === 'forms') {
+        const id = filters.id;
+        if (typeof id === 'string' && state.formErrorsById[id]) {
+          return { data: null, error: state.formErrorsById[id] };
+        }
+
         const row = state.forms.find(form => Object.entries(filters).every(([key, value]) => (form as any)[key] === value));
         return { data: row || null, error: null };
       }
@@ -52,6 +58,7 @@ describe('/api/qr-redirect', () => {
   beforeEach(() => {
     process.env.PUBLIC_URL = 'https://www.signflow.ink';
     state.tableErrors = {};
+    state.formErrorsById = {};
   });
 
   it('redirects QR codes stored on the form record', async () => {
@@ -95,6 +102,16 @@ describe('/api/qr-redirect', () => {
 
     const res = await handler(new Request('https://www.signflow.ink/qr/qr-current', {
       headers: { 'x-forwarded-for': '192.0.2.5' },
+    }));
+
+    expect(res.status).toBe(500);
+  });
+
+  it('returns 500 when the legacy linked form lookup fails', async () => {
+    state.formErrorsById['form-legacy'] = { message: 'database unavailable' };
+
+    const res = await handler(new Request('https://www.signflow.ink/qr/qr-legacy', {
+      headers: { 'x-forwarded-for': '192.0.2.6' },
     }));
 
     expect(res.status).toBe(500);
