@@ -46,7 +46,10 @@ async function stripePost(path: string, params: Record<string, string | number |
   return data;
 }
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const JSON_HEADERS = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+};
 
 /**
  * POST /api/stripe-checkout
@@ -99,8 +102,8 @@ export default async function handler(req: Request) {
       'line_items[0][quantity]': 1,
       'metadata[user_id]': user.id,
       'subscription_data[metadata][user_id]': user.id,
-      success_url: `${appUrl}/dashboard?checkout=success`,
-      cancel_url: `${appUrl}/dashboard?checkout=cancelled`,
+      success_url: `${appUrl}/#/admin/dashboard?checkout=success`,
+      cancel_url: `${appUrl}/#/admin/dashboard?checkout=cancelled`,
     };
 
     // Pre-fill email only when a valid value is present

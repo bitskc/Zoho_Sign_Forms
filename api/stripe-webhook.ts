@@ -170,10 +170,11 @@ export default async function handler(req: Request) {
           );
 
         if (upsertErr) {
-          logger.error('Failed to upsert subscription on checkout.session.completed', new Error(upsertErr.message), {
+          logger.error('Failed to upsert subscription on checkout.session.completed', {
             userId,
             customerId,
             subscriptionId,
+            errorMessage: upsertErr.message,
           });
           // Return 500 so Stripe retries on transient DB errors
           return new Response(
@@ -236,11 +237,12 @@ export default async function handler(req: Request) {
 
         const { error: updateErr } = await query;
         if (updateErr) {
-          logger.error('Failed to update subscription on subscription.updated', new Error(updateErr.message), {
+          logger.error('Failed to update subscription on subscription.updated', {
             userId,
             customerId,
             subscriptionId,
             status,
+            errorMessage: updateErr.message,
           });
           return new Response(
             JSON.stringify({ received: false, error: updateErr.message }),
@@ -270,9 +272,10 @@ export default async function handler(req: Request) {
 
         const { error: deleteErr } = await query;
         if (deleteErr) {
-          logger.error('Failed to update subscription on subscription.deleted', new Error(deleteErr.message), {
+          logger.error('Failed to update subscription on subscription.deleted', {
             userId,
             customerId,
+            errorMessage: deleteErr.message,
           });
           return new Response(
             JSON.stringify({ received: false, error: deleteErr.message }),

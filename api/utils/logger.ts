@@ -127,9 +127,11 @@ export function createRequestLogger(req: Request) {
   const logError = (error: Error | unknown, statusCode: number = 500) => {
     const duration = Date.now() - startTime;
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    logger.error('Request failed', normalizedError, {
+    logger.error('Request failed', {
       statusCode,
       duration,
+      errorName: normalizedError.name,
+      errorMessage: normalizedError.message,
     });
   };
 

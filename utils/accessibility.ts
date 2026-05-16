@@ -1,3 +1,5 @@
+import type { KeyboardEvent } from 'react';
+
 /**
  * Accessibility Utilities
  * WCAG 2.1 compliance helpers for color contrast and validation
@@ -176,12 +178,12 @@ export const KeyCodes = {
   END: 'End'
 } as const;
 
-export function isKeyPressed(event: React.KeyboardEvent, key: string): boolean {
+export function isKeyPressed(event: KeyboardEvent, key: string): boolean {
   return event.key === key;
 }
 
 export function handleEnterOrSpace(
-  event: React.KeyboardEvent,
+  event: KeyboardEvent,
   callback: () => void
 ): void {
   if (isKeyPressed(event, KeyCodes.ENTER) || isKeyPressed(event, KeyCodes.SPACE)) {

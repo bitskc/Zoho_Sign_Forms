@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import type { KeyboardEvent } from 'react';
 import {
   getRelativeLuminance,
   getContrastRatio,
@@ -237,17 +238,17 @@ describe('Keyboard Event Helpers', () => {
 
   describe('isKeyPressed', () => {
     it('should detect Enter key', () => {
-      const event = { key: 'Enter' } as React.KeyboardEvent;
+      const event = { key: 'Enter' } as KeyboardEvent;
       expect(isKeyPressed(event, KeyCodes.ENTER)).toBe(true);
     });
 
     it('should detect Space key', () => {
-      const event = { key: ' ' } as React.KeyboardEvent;
+      const event = { key: ' ' } as KeyboardEvent;
       expect(isKeyPressed(event, KeyCodes.SPACE)).toBe(true);
     });
 
     it('should return false for different key', () => {
-      const event = { key: 'Enter' } as React.KeyboardEvent;
+      const event = { key: 'Enter' } as KeyboardEvent;
       expect(isKeyPressed(event, KeyCodes.ESCAPE)).toBe(false);
     });
   });
@@ -259,7 +260,7 @@ describe('Keyboard Event Helpers', () => {
       const event = { 
         key: 'Enter', 
         preventDefault: () => {} 
-      } as React.KeyboardEvent;
+      } as KeyboardEvent;
       
       handleEnterOrSpace(event, callback);
       expect(called).toBe(true);
@@ -271,7 +272,7 @@ describe('Keyboard Event Helpers', () => {
       const event = { 
         key: ' ', 
         preventDefault: () => {} 
-      } as React.KeyboardEvent;
+      } as KeyboardEvent;
       
       handleEnterOrSpace(event, callback);
       expect(called).toBe(true);
@@ -283,7 +284,7 @@ describe('Keyboard Event Helpers', () => {
       const event = { 
         key: 'Escape', 
         preventDefault: () => {} 
-      } as React.KeyboardEvent;
+      } as KeyboardEvent;
       
       handleEnterOrSpace(event, callback);
       expect(called).toBe(false);
@@ -294,7 +295,7 @@ describe('Keyboard Event Helpers', () => {
       const event = { 
         key: 'Enter', 
         preventDefault: () => { prevented = true; } 
-      } as React.KeyboardEvent;
+      } as KeyboardEvent;
       
       handleEnterOrSpace(event, () => {});
       expect(prevented).toBe(true);

@@ -34,20 +34,35 @@ export const triggerZohoSignTemplate = async (
       }
     }
 
+    const includeAdminOverrides = Boolean(
+      isTest ||
+      creds?.clientId ||
+      creds?.clientSecret ||
+      creds?.refreshToken ||
+      creds?.apiDomain
+    );
+
+    const payload: Record<string, unknown> = {
+      formId: form.id,
+      slug: form.slug,
+      signer,
+      isTest,
+    };
+
+    if (includeAdminOverrides) {
+      payload.apiDomain = creds?.apiDomain || form.apiDomain;
+      payload.refreshToken = creds?.refreshToken;
+      payload.clientId = creds?.clientId;
+      payload.clientSecret = creds?.clientSecret;
+      payload.userId = creds?.userId;
+      payload.templateId = form.templateId;
+      payload.roleName = form.roleName;
+    }
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apiDomain: creds?.apiDomain || form.apiDomain,
-        refreshToken: creds?.refreshToken,
-        clientId: creds?.clientId,
-        clientSecret: creds?.clientSecret,
-        userId: creds?.userId,
-        templateId: form.templateId,
-        roleName: form.roleName,
-        signer,
-        isTest
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
@@ -61,6 +76,14 @@ export const triggerZohoSignTemplate = async (
       return { 
         success: false, 
         error: `Zoho Error (${response.status}): ${detail}${data.hint ? ` — ${data.hint}` : ''}`
+      };
+    }
+
+    if (data.requestId || data.signingUrl) {
+      return {
+        success: true,
+        requestId: data.requestId,
+        signingUrl: data.signingUrl,
       };
     }
 
@@ -110,7 +133,7 @@ export const exchangeToken = async (
 /**
  * Convenience wrapper for testing a connection
  */
-export const testZohoConnection = async (form: FormDefinition, creds?: { clientId?: string; clientSecret?: string; refreshToken?: string; apiDomain?: string }) => {
+export const testZohoConnection = async (form: FormDefinition, creds?: ZohoCreds) => {
   return triggerZohoSignTemplate(
     form, 
     { name: "System Test", email: "test@example.com" },

@@ -1,11 +1,17 @@
 import { supabaseServer } from './_supabaseServer.js';
 import { getUserFromAuthHeader } from './utils/auth.js';
+import { checkRateLimit, createRateLimitResponse, getRateLimitKey, RATE_LIMITS } from './utils/rateLimiter.js';
 import QRCode from 'qrcode';
 
 // Node.js runtime required for the 'qrcode' package (not Edge-compatible).
 // NOTE: This file must not share imports with Edge-runtime handlers to avoid
 // pulling Node.js APIs into an Edge context.
 export const config = { runtime: 'nodejs' };
+
+const JSON_HEADERS: HeadersInit = {
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+};
 
 /**
  * Generate a secure stable QR code ID using CSPRNG with rejection sampling
@@ -30,19 +36,27 @@ function generateStableId(): string {
   return 'qr-' + generateSecureId(8, 'abcdefghijklmnopqrstuvwxyz0123456789');
 }
 
+function checkUserQrRateLimit(req: Request, userId: string): Response | null {
+  const result = checkRateLimit(`${getRateLimitKey(req, userId)}:qrcodes`, RATE_LIMITS.QRCODES);
+  return result.allowed ? null : createRateLimitResponse(result);
+}
+
 export default async function handler(req: Request) {
-  const url = new URL(req.url);
+  const requestUrl = req.url.startsWith('http') ? req.url : `https://www.signflow.ink${req.url}`;
+  const url = new URL(requestUrl);
   
   // GET - Retrieve QR code for a form (authentication required)
   if (req.method === 'GET') {
     const user = await getUserFromAuthHeader(req);
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: JSON_HEADERS });
     }
+    const rateLimitResponse = checkUserQrRateLimit(req, user.id);
+    if (rateLimitResponse) return rateLimitResponse;
 
     const formId = url.searchParams.get('formId');
     if (!formId) {
-      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400, headers: JSON_HEADERS });
     }
 
     // Verify the form belongs to the requesting user
@@ -53,27 +67,27 @@ export default async function handler(req: Request) {
       .maybeSingle();
 
     if (ownerError || !formOwner || formOwner.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: JSON_HEADERS });
     }
 
     try {
       const { data, error } = await supabaseServer
         .from('form_qrcodes')
-        .select('*')
+        .select('id,form_id,qr_code_data,stable_id,created_at,updated_at')
         .eq('form_id', formId)
         .maybeSingle();
 
       if (error) {
         console.error('QR code fetch error:', error);
         // If table doesn't exist, return 404 so client can generate
-        if (error.message.includes('does not exist') || error.code === '42P01') {
-          return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404 });
+          if (error.message.includes('does not exist') || error.code === '42P01') {
+          return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404, headers: JSON_HEADERS });
         }
-        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+        return new Response(JSON.stringify({ error: 'Database error' }), { status: 500, headers: JSON_HEADERS });
       }
 
       if (!data) {
-        return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404 });
+        return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404, headers: JSON_HEADERS });
       }
 
       return new Response(JSON.stringify({
@@ -83,11 +97,11 @@ export default async function handler(req: Request) {
         stableId: data.stable_id,
         createdAt: data.created_at,
         updatedAt: data.updated_at
-      }), { status: 200 });
+      }), { status: 200, headers: JSON_HEADERS });
     } catch (err: any) {
       console.error('QR code GET exception:', err);
       // Return 404 to allow client to generate
-      return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'QR code not found' }), { status: 404, headers: JSON_HEADERS });
     }
   }
 
@@ -96,14 +110,21 @@ export default async function handler(req: Request) {
     try {
       const user = await getUserFromAuthHeader(req);
       if (!user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: JSON_HEADERS });
       }
+      const rateLimitResponse = checkUserQrRateLimit(req, user.id);
+      if (rateLimitResponse) return rateLimitResponse;
 
-      const body = await req.json();
+      let body: any;
+      try {
+        body = await req.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: JSON_HEADERS });
+      }
       const { formId, regenerate } = body;
 
       if (!formId) {
-        return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+        return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400, headers: JSON_HEADERS });
       }
 
       // Verify the form belongs to the user
@@ -116,13 +137,13 @@ export default async function handler(req: Request) {
 
       if (formError || !formData) {
         console.error('Form fetch error:', formError);
-        return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+        return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: JSON_HEADERS });
       }
 
       // Check if QR code already exists
       const { data: existingQR } = await supabaseServer
         .from('form_qrcodes')
-        .select('*')
+        .select('id,form_id,qr_code_data,stable_id,created_at,updated_at')
         .eq('form_id', formId)
         .maybeSingle();
 
@@ -134,7 +155,7 @@ export default async function handler(req: Request) {
           stableId: existingQR.stable_id,
           createdAt: existingQR.created_at,
           updatedAt: existingQR.updated_at
-        }), { status: 200 });
+        }), { status: 200, headers: JSON_HEADERS });
       }
 
       // Generate stable ID (reuse existing or create new)
@@ -150,7 +171,10 @@ export default async function handler(req: Request) {
 
       // Generate QR code URL pointing to the stable redirect endpoint
       // Use environment variable or hardcoded production URL for security
-      const baseUrl = process.env.PUBLIC_URL || 'https://www.signflow.ink';
+      const configuredPublicUrl = process.env.PUBLIC_URL || 'https://www.signflow.ink';
+      const baseUrl = /^https?:\/\//i.test(configuredPublicUrl)
+        ? configuredPublicUrl
+        : 'https://www.signflow.ink';
       const qrUrl = `${baseUrl}/qr/${stableId}`;
 
       // Generate QR code as a base64 PNG data URI server-side.
@@ -176,7 +200,7 @@ export default async function handler(req: Request) {
 
       if (saveError) {
         console.error('QR code save error:', saveError);
-        return new Response(JSON.stringify({ error: 'Failed to save QR code' }), { status: 500 });
+        return new Response(JSON.stringify({ error: 'Failed to save QR code' }), { status: 500, headers: JSON_HEADERS });
       }
 
       return new Response(JSON.stringify({
@@ -186,10 +210,10 @@ export default async function handler(req: Request) {
         stableId: savedQR.stable_id,
         createdAt: savedQR.created_at,
         updatedAt: savedQR.updated_at
-      }), { status: 200 });
+      }), { status: 200, headers: JSON_HEADERS });
     } catch (err: any) {
       console.error('QR code POST exception:', err);
-      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: JSON_HEADERS });
     }
   }
 
@@ -197,12 +221,14 @@ export default async function handler(req: Request) {
   if (req.method === 'DELETE') {
     const user = await getUserFromAuthHeader(req);
     if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: JSON_HEADERS });
     }
+    const rateLimitResponse = checkUserQrRateLimit(req, user.id);
+    if (rateLimitResponse) return rateLimitResponse;
 
     const formId = url.searchParams.get('formId');
     if (!formId) {
-      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing formId' }), { status: 400, headers: JSON_HEADERS });
     }
 
     // Verify the form belongs to the user
@@ -214,7 +240,7 @@ export default async function handler(req: Request) {
       .maybeSingle();
 
     if (formError || !formData) {
-      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'Form not found' }), { status: 404, headers: JSON_HEADERS });
     }
 
     // Delete existing QR code
@@ -225,11 +251,11 @@ export default async function handler(req: Request) {
 
     if (deleteError) {
       console.error('QR code delete error:', deleteError);
-      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Database error' }), { status: 500, headers: JSON_HEADERS });
     }
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: JSON_HEADERS });
   }
 
-  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: JSON_HEADERS });
 }

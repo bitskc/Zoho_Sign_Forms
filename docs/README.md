@@ -6,6 +6,7 @@
 
 - [Features Overview](#features-overview) - What SignFlow Pro can do
 - [Deployment Guide](DEPLOYMENT_GUIDE.md) - How to deploy to production
+- [App Remediation PRD](APP_REMEDIATION_PRD.md) - Comprehensive plan to fix performance, UX, reliability, and accessibility issues
 - [Development Priorities](PUNCHLIST.md) - QA-recommended action items
 - [Archive](archive/) - Historical implementation reports
 
@@ -51,6 +52,7 @@
 ## Documentation Organization
 
 ### Active Documentation
+- **[APP_REMEDIATION_PRD.md](APP_REMEDIATION_PRD.md)** - Current implementation-ready remediation plan for slow signing pages, dashboard performance, API reliability, UX, and accessibility
 - **[PUNCHLIST.md](PUNCHLIST.md)** - QA-recommended priorities and 30-day action plan
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment instructions
 - **[FEATURES.md](FEATURES.md)** - Detailed feature descriptions and usage

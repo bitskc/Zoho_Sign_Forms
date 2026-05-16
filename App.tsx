@@ -10,7 +10,7 @@ import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRel
 
 
 // Reserved slugs that cannot be used for forms
-const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico'];
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
 
 // Validate slug format and check against reserved words
 const isValidSlug = (slug: string): boolean => {
@@ -188,8 +188,6 @@ const App: React.FC = () => {
   const fetchingFormBySlugRef = useRef(false);
   const lastFetchedSlugRef = useRef<string | null>(null);
   const analyticsTrackedRef = useRef<Set<string>>(new Set());
-  const analyticsLoadedRef = useRef<Set<string>>(new Set()); // tracks which form IDs have had analytics fetched
-  const qrBatchProcessingRef = useRef(false);
 
   // Fetch analytics for a form
   const fetchAnalytics = async (formId: string, window: string = analyticsTimeWindow) => {
@@ -247,93 +245,35 @@ const App: React.FC = () => {
       if (!res.ok) {
         if (res.status === 401) {
           console.warn('Forms API unauthorized (401) - session may have expired');
+          // 401 is definitive — do not retry until the user re-authenticates.
+        } else {
+          // Transient error (5xx, network hiccup, etc.) — allow a future retry.
+          console.warn(`Forms API error (${res.status}) - will allow retry`);
+          setFormsFetchAttempted(false);
         }
         setForms([]);
         return;
       }
       const data = await res.json();
       setForms(data || []);
-      
-      // Auto-load analytics for all forms in the background
+
+      // Only hydrate known QR codes from existing form payload.
+      // Do not auto-generate or auto-fetch missing QR codes on login/dashboard load.
       if (data && data.length > 0) {
-        for (const form of data) {
-          // Load analytics for each form (don't await to prevent blocking)
-          fetchAnalytics(form.id).catch(e => console.warn('Background analytics load failed for form', form.id, e));
-        }
-      }
-      
-      // Load existing QR codes and generate missing ones (with batching for performance)
-      // Prevent concurrent batch processing
-      if (qrBatchProcessingRef.current) {
-        console.log('QR batch processing already in progress, skipping');
-        return;
-      }
-      
-      qrBatchProcessingRef.current = true;
-      
-      try {
-        const newQrCodes = new Map();
-        const formsNeedingQR = [];
-        
-        for (const form of (data || [])) {
-          // If form has existing QR code data from database, use it
-          if (form.qrCodeData) {
-            newQrCodes.set(form.id, form.qrCodeData);
-          }
-          // Collect forms that need QR generation
-          else {
-            formsNeedingQR.push(form);
-          }
-        }
-        
-        // Generate QR codes in small batches of 2 to be very API-friendly
-        const batchSize = 2;
-        for (let i = 0; i < formsNeedingQR.length; i += batchSize) {
-          const batch = formsNeedingQR.slice(i, i + batchSize);
-          
-          await Promise.all(batch.map(async (form) => {
-            try {
-              const qrResponse = await fetch('/api/qrcodes', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  formId: form.id,
-                  templateId: form.templateId,
-                  slug: form.slug || `form-${form.id}`
-                })
-              });
-              
-              if (qrResponse.ok) {
-                const qrResult = await qrResponse.json();
-                newQrCodes.set(form.id, qrResult.qrCodeData);
-              }
-            } catch (error) {
-              console.log(`Failed to generate QR for form ${form.id}:`, error);
-            }
-          }));
-          
-          // Longer delay between batches to be very API-friendly
-          if (i + batchSize < formsNeedingQR.length) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-        
-        // Use functional update to merge with current state safely
         setQrCodes(prev => {
           const merged = new Map(prev);
-          for (const [key, value] of newQrCodes.entries()) {
-            merged.set(key, value);
+          for (const form of data) {
+            if (form?.id && form.qrCodeData) {
+              merged.set(form.id, form.qrCodeData);
+            }
           }
           return merged;
         });
-      } finally {
-        qrBatchProcessingRef.current = false;
       }
     } catch (e) {
       console.error('fetch forms error', e);
+      // Network failure/timeout can be transient — allow a future retry.
+      setFormsFetchAttempted(false);
       setForms([]);
     }
   };
@@ -1041,7 +981,7 @@ const App: React.FC = () => {
       // Track failed submission
       trackAnalytics(currentForm.id, 'submit_error', { name: signer.name, email: signer.email, error: res.error });
       
-      setError(res.error || "Submission failed. Please try again.");
+      setError('We could not prepare this document. Please try again or contact the sender.');
     }
     setLoading(false);
   };
@@ -1057,18 +997,28 @@ const App: React.FC = () => {
   // Analytics tracking function - simplified, relies on caller to prevent duplicates
   const trackAnalytics = async (formId: string, eventType: 'visit' | 'submit_start' | 'submit_success' | 'submit_error', data?: { name?: string; email?: string; error?: string }) => {
     try {
+      const payload = JSON.stringify({
+        formId,
+        eventType,
+        visitorEmail: data?.email,
+        visitorName: data?.name,
+        referrer: document.referrer || undefined,
+        userAgent: navigator.userAgent,
+        metadata: data?.error ? { error: data.error } : undefined
+      });
+
+      if ('sendBeacon' in navigator) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        if (navigator.sendBeacon('/api/analytics', blob)) {
+          return;
+        }
+      }
+
       await fetch('/api/analytics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          formId,
-          eventType,
-          visitorEmail: data?.email,
-          visitorName: data?.name,
-          referrer: document.referrer || undefined,
-          userAgent: navigator.userAgent,
-          metadata: data?.error ? { error: data.error } : undefined
-        })
+        body: payload,
+        keepalive: true,
       });
     } catch (e) {
       console.warn('Analytics tracking failed:', e);
@@ -1093,14 +1043,12 @@ const App: React.FC = () => {
         // QR code doesn't exist, generate it
         await generateQRCode(formId);
       } else {
-        // Handle other errors by attempting to generate
-        console.warn('QR fetch returned non-404 error, attempting to generate:', res.status);
-        await generateQRCode(formId);
+        const errorData = await res.json().catch(() => ({ error: 'Unable to load QR code' }));
+        setError(`Failed to load QR code: ${errorData.error || res.status}`);
       }
     } catch (e) {
       console.error('Failed to fetch QR code:', e);
-      // If fetch fails, try to generate
-      await generateQRCode(formId);
+      setError('Failed to load QR code. Please try again.');
     } finally {
       setLoadingQR(prev => {
         const next = new Set(prev);
@@ -1148,6 +1096,7 @@ const App: React.FC = () => {
   // Regenerate QR code for a form
   const regenerateQR = async (formId: string) => {
     if (!sessionToken) return;
+    setLoadingQR(prev => new Set(prev).add(formId));
     
     try {
       const form = forms.find(f => f.id === formId);
@@ -1177,6 +1126,12 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Error regenerating QR code:', error);
       setError('Failed to regenerate QR code. Please try again.');
+    } finally {
+      setLoadingQR(prev => {
+        const next = new Set(prev);
+        next.delete(formId);
+        return next;
+      });
     }
   };
 
@@ -1219,18 +1174,7 @@ const App: React.FC = () => {
     }
   }, [view, currentForm?.id]);
 
-  // Auto-load analytics when admin dashboard is accessed
-  // Use analyticsLoadedRef to avoid re-triggering on every setAnalytics call (Map ref stability)
-  useEffect(() => {
-    if (view === ViewMode.ADMIN_DASHBOARD && sessionToken && forms.length > 0) {
-      for (const form of forms) {
-        if (form.id && !analyticsLoadedRef.current.has(form.id)) {
-          analyticsLoadedRef.current.add(form.id);
-          fetchAnalytics(form.id).catch(e => console.warn('Analytics auto-load failed for form', form.id, e));
-        }
-      }
-    }
-  }, [view, sessionToken, forms]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Analytics are loaded on-demand from the analytics tab.
 
   // UX-01: Clear armed delete confirmation if the user navigates away or changes view
   useEffect(() => {
@@ -1947,6 +1891,10 @@ const App: React.FC = () => {
                   if (tab.id === 'analytics' && selectedForm && !analytics.has(selectedForm.id)) {
                     fetchAnalytics(selectedForm.id);
                   }
+                  // Load QR data on-demand when QR tab is opened
+                  if (tab.id === 'qr' && selectedForm && !qrCodes.has(selectedForm.id) && !loadingQR.has(selectedForm.id)) {
+                    fetchQRCode(selectedForm.id);
+                  }
                 }}
                 className={`flex-1 px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${
                   detailsTab === tab.id 
@@ -2220,9 +2168,10 @@ const App: React.FC = () => {
                 </div>
                 <button 
                   onClick={() => regenerateQR(selectedForm.id)}
-                  className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm"
+                  disabled={loadingQR.has(selectedForm.id)}
+                  className="px-4 py-2 bg-slate-600 text-white rounded-lg font-semibold hover:bg-slate-700 transition-colors text-sm disabled:opacity-50"
                 >
-                  Regenerate
+                  {loadingQR.has(selectedForm.id) ? 'Refreshing...' : 'Refresh QR Image'}
                 </button>
               </div>
               
@@ -2244,15 +2193,18 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>QR code is being generated...</p>
+                  <p className={`text-sm mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {loadingQR.has(selectedForm.id) ? 'Loading QR code...' : 'No QR image has been generated yet.'}
+                  </p>
                   <button 
-                    onClick={() => regenerateQR(selectedForm.id)}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                    onClick={() => generateQRCode(selectedForm.id)}
+                    disabled={loadingQR.has(selectedForm.id)}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
                   >
                     <svg aria-hidden="true" focusable="false" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                     </svg>
-                    Generate QR Code
+                    {loadingQR.has(selectedForm.id) ? 'Loading...' : 'Generate QR Code'}
                   </button>
                 </div>
               )}
@@ -2308,13 +2260,13 @@ const App: React.FC = () => {
                       <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Total Visits</p>
                     </div>
                     <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.successfulSubmissions}</p>
+                      <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{analytics.get(selectedForm.id).summary.totalSubmissions}</p>
                       <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Submissions</p>
                     </div>
                     <div className={`p-4 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
                       <p className={`text-2xl font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
                         {analytics.get(selectedForm.id).summary.totalVisits > 0 
-                          ? Math.round((analytics.get(selectedForm.id).summary.successfulSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
+                            ? Math.round((analytics.get(selectedForm.id).summary.totalSubmissions / analytics.get(selectedForm.id).summary.totalVisits) * 100)
                           : 0}%
                       </p>
                       <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Conversion Rate</p>
@@ -2462,6 +2414,41 @@ const App: React.FC = () => {
       )}
 
       {view === ViewMode.PUBLIC_FORM && (() => {
+        if (isFormLoading || !currentForm) {
+          return (
+            <main id="main-content">
+              <div className="min-h-screen p-6 flex flex-col bg-slate-50">
+                <div className="flex-1 flex items-center justify-center">
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-xl p-8"
+                  >
+                    <span className="sr-only">Loading signing form...</span>
+                    <div className="flex justify-center mb-6">
+                      <div className="h-12 w-32 rounded bg-slate-200 motion-safe:animate-pulse" />
+                    </div>
+                    <div className="mx-auto mb-4 h-14 w-14 rounded-lg bg-slate-200 motion-safe:animate-pulse" />
+                    <div className="mx-auto mb-3 h-7 w-4/5 rounded bg-slate-200 motion-safe:animate-pulse" />
+                    <div className="mx-auto mb-8 h-4 w-full rounded bg-slate-100 motion-safe:animate-pulse" />
+                    <div className="space-y-5">
+                      <div>
+                        <div className="mb-2 h-3 w-24 rounded bg-slate-200 motion-safe:animate-pulse" />
+                        <div className="h-12 rounded-lg border border-slate-200 bg-slate-50" />
+                      </div>
+                      <div>
+                        <div className="mb-2 h-3 w-28 rounded bg-slate-200 motion-safe:animate-pulse" />
+                        <div className="h-12 rounded-lg border border-slate-200 bg-slate-50" />
+                      </div>
+                      <div className="h-12 rounded-lg bg-slate-300 motion-safe:animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          );
+        }
+
         // Get landing config with defaults
         const lc = currentForm?.landingConfig || {};
         const theme = lc.theme || {};
@@ -2616,9 +2603,17 @@ const App: React.FC = () => {
         <main id="main-content">
         <div className="flex items-center justify-center min-h-screen text-center px-6">
           <div className="max-w-xl">
-            <h1 className={`text-[10rem] font-black leading-none ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>404</h1>
-            <h2 className={`text-4xl font-black mb-6 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Integration Portal Missing</h2>
-            <a href="#/admin" className="inline-block px-10 py-4 bg-slate-900 rounded-full text-white font-black text-sm uppercase tracking-widest shadow-xl focus-visible:ring-2 focus-visible:ring-white outline-none">Return to Safety</a>
+            <h1 className={`text-[clamp(4rem,25vw,10rem)] font-black leading-none ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>404</h1>
+            <h2 className={`text-4xl font-black mb-4 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Signing Page Unavailable</h2>
+            <p className={`mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+              {error || 'This signing page could not be found. Please check the link or contact the sender.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="inline-block px-8 py-3 bg-slate-900 rounded-full text-white font-bold text-sm uppercase tracking-widest shadow-xl focus-visible:ring-2 focus-visible:ring-white outline-none"
+            >
+              Try Again
+            </button>
           </div>
         </div>
         </main>
