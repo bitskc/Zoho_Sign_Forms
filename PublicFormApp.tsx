@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { triggerZohoSignTemplate } from './services/zohoService';
-import { getPublicFormSlugFromPath, isValidPublicFormSlug } from './services/routingService';
+import { getEmbedFormSlugFromPath, getPublicFormSlugFromPath, isValidPublicFormSlug } from './services/routingService';
 import { getRelativeLuminance } from './utils/accessibility';
 import type { FormDefinition, SignerData } from './types';
 
@@ -15,9 +15,10 @@ const slugToTitle = (slug: string): string => {
     .join(' ');
 };
 
-const getSlugFromPath = () => getPublicFormSlugFromPath(window.location.pathname || '/') || '';
+const getSlugFromPath = () => getPublicFormSlugFromPath(window.location.pathname || '/') || getEmbedFormSlugFromPath(window.location.pathname || '/') || '';
 
 const PublicFormApp: React.FC = () => {
+  const isEmbedded = getEmbedFormSlugFromPath(window.location.pathname || '/') !== null;
   const [currentForm, setCurrentForm] = useState<FormDefinition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -218,17 +219,24 @@ const PublicFormApp: React.FC = () => {
     : { text: '#1E293B', muted: '#64748B' };
   const textColor = theme.textColor || autoTextColors.text;
   const mutedColor = theme.mutedColor || autoTextColors.muted;
+  const inputStyles = {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    color: '#0F172A',
+    caretColor: '#0F172A',
+    '--tw-ring-color': `${primaryColor}50`,
+  } as React.CSSProperties;
 
   return (
-    <main id="main-content">
-      <div className="min-h-screen p-6 flex flex-col" style={{ backgroundColor: bgColor }}>
-        {lc.logoUrl && (
+      <main id="main-content">
+        <div className={`${isEmbedded ? 'min-h-0 p-3' : 'min-h-screen p-6'} flex flex-col`} style={{ backgroundColor: bgColor }}>
+        {!isEmbedded && lc.logoUrl && (
           <div className="text-center pt-6 pb-2">
             <img src={lc.logoUrl} alt={lc.logoAlt || 'Company logo'} className="h-12 mx-auto object-contain" />
           </div>
         )}
 
-        <div className="flex-1 flex items-center justify-center">
+        <div className={`${isEmbedded ? '' : 'flex-1 flex items-center justify-center'}`}>
           <div className="w-full max-w-md">
             {successData ? (
               <div className="p-10 rounded-lg shadow-xl text-center animate-in zoom-in duration-500 border" style={{ backgroundColor: cardColor, borderColor: '#E2E8F0', color: textColor }}>
@@ -248,7 +256,7 @@ const PublicFormApp: React.FC = () => {
               </div>
             ) : (
               <div className="rounded-lg shadow-xl border" style={{ backgroundColor: cardColor, borderColor: '#E2E8F0' }}>
-                <div className="p-8">
+                <div className={isEmbedded ? 'p-5' : 'p-8'}>
                   <div className="text-center mb-6">
                     <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg mb-4" style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
                       <svg aria-hidden="true" focusable="false" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -270,13 +278,13 @@ const PublicFormApp: React.FC = () => {
                       <label htmlFor="signerName" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
                         Full Name <span aria-hidden="true" style={{ color: '#B91C1C' }}>*</span>
                       </label>
-                      <input required id="signerName" name="signerName" placeholder="John Doe" autoFocus aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                      <input required id="signerName" name="signerName" placeholder="John Doe" autoFocus aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border placeholder:text-slate-400" style={inputStyles} />
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="signerEmail" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
                         Email Address <span aria-hidden="true" style={{ color: '#B91C1C' }}>*</span>
                       </label>
-                      <input required id="signerEmail" name="signerEmail" type="email" placeholder="john@example.com" aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border" style={{ backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: textColor, '--tw-ring-color': `${primaryColor}50` } as React.CSSProperties} />
+                      <input required id="signerEmail" name="signerEmail" type="email" placeholder="john@example.com" aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border placeholder:text-slate-400" style={inputStyles} />
                     </div>
                     {error && (
                       <div role="alert" className="p-3 text-xs font-medium rounded-lg" style={{ backgroundColor: 'rgba(185, 28, 28, 0.1)', color: '#B91C1C', border: '1px solid rgba(185, 28, 28, 0.3)' }}>
@@ -306,7 +314,7 @@ const PublicFormApp: React.FC = () => {
           </div>
         </div>
 
-        <div className="text-center py-4 text-xs" style={{ color: mutedColor }}>
+        <div className={`${isEmbedded ? 'py-2' : 'py-4'} text-center text-xs`} style={{ color: mutedColor }}>
           {lc.footerText && <p className="mb-1">{lc.footerText}</p>}
           {showPoweredBy && (
             <p className="opacity-60">Powered by <a href="https://signflow.ink" className="hover:underline">SignFlow</a></p>

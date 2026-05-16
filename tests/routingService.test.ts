@@ -3,6 +3,7 @@ import {
   getSubdomainType,
   getRouteContext,
   buildFormUrl,
+  getEmbedFormSlugFromPath,
   getPublicFormSlugFromPath,
   isValidPublicFormSlug,
 } from '../services/routingService';
@@ -83,6 +84,14 @@ describe('routingService public form slug helpers', () => {
     expect(getPublicFormSlugFromPath('/fbmc/')).toBe('fbmc');
     expect(getPublicFormSlugFromPath('/fbmc/extra')).toBeNull();
     expect(getPublicFormSlugFromPath('/')).toBeNull();
+  });
+
+  it('accepts only /embed/:slug embed paths', () => {
+    expect(getEmbedFormSlugFromPath('/embed/fbmc')).toBe('fbmc');
+    expect(getEmbedFormSlugFromPath('/embed/fbmc/')).toBe('fbmc');
+    expect(getEmbedFormSlugFromPath('/embed/admin')).toBeNull();
+    expect(getEmbedFormSlugFromPath('/embed/fbmc/extra')).toBeNull();
+    expect(getEmbedFormSlugFromPath('/fbmc')).toBeNull();
   });
 
   it('rejects invalid and reserved public form slugs', () => {
