@@ -1153,7 +1153,7 @@ const App: React.FC = () => {
   const buildEmbedCode = (form: FormDefinition) => {
     const title = escapeHtmlAttribute(`${form.name} signing form`);
     const src = escapeHtmlAttribute(buildEmbedUrl(form.slug));
-    return `<iframe src="${src}" title="${title}" width="100%" height="720" style="border:0;max-width:560px;width:100%;" loading="lazy"></iframe>`;
+    return `<iframe src="${src}" title="${title}" width="100%" height="720" style="border:0;max-width:560px;width:100%;" loading="lazy" referrerpolicy="origin"></iframe>`;
   };
 
   const copyEmbedCode = async (form: FormDefinition) => {

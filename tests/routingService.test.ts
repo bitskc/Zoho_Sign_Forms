@@ -69,12 +69,19 @@ describe('routingService.getRouteContext', () => {
   });
 
   it('does not treat reserved paths as form slugs', () => {
-    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc']) {
+    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc', '/embed']) {
       mockLocation(`https://www.signflow.ink${path}`);
       const ctx = getRouteContext();
       expect(ctx.isFormSlug).toBe(false);
       expect(ctx.formSlug).toBeNull();
     }
+  });
+
+  it('recognizes embed form routes', () => {
+    mockLocation('https://www.signflow.ink/embed/fbmc');
+    const ctx = getRouteContext();
+    expect(ctx.isFormSlug).toBe(true);
+    expect(ctx.formSlug).toBe('fbmc');
   });
 });
 

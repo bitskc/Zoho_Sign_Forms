@@ -278,7 +278,7 @@ const PublicFormApp: React.FC = () => {
                       <label htmlFor="signerName" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
                         Full Name <span aria-hidden="true" style={{ color: '#B91C1C' }}>*</span>
                       </label>
-                      <input required id="signerName" name="signerName" placeholder="John Doe" autoFocus aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border placeholder:text-slate-400" style={inputStyles} />
+                      <input required id="signerName" name="signerName" placeholder="John Doe" autoFocus={!isEmbedded} aria-required="true" className="w-full px-4 py-3 rounded-lg outline-none focus:ring-2 font-medium text-base border placeholder:text-slate-400" style={inputStyles} />
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="signerEmail" className="text-xs font-semibold uppercase tracking-wide" style={{ color: mutedColor }}>
