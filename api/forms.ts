@@ -142,7 +142,7 @@ export default async function handler(req: Request) {
         .from(table)
         .select(`
           id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,
-          form_qrcodes(stable_id, created_at)
+          form_qrcodes(qr_code_data, stable_id, created_at)
         `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
