@@ -35,29 +35,48 @@ export default async function handler(req: Request) {
       .eq('qr_stable_id', stableId)
       .maybeSingle();
 
+    if (formError) {
+      return new Response(JSON.stringify({ error: 'Database error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      });
+    }
+
     let slug = formData?.slug;
 
-    if (!slug && !formError) {
+    if (!slug) {
       const { data: qrData, error: qrError } = await supabaseServer
         .from('form_qrcodes')
         .select('form_id')
         .eq('stable_id', stableId)
         .maybeSingle();
 
-      if (qrData?.form_id && !qrError) {
+      if (qrError) {
+        return new Response(JSON.stringify({ error: 'Database error' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        });
+      }
+
+      if (qrData?.form_id) {
         const { data: legacyFormData, error: legacyFormError } = await supabaseServer
           .from('forms')
           .select('slug')
           .eq('id', qrData.form_id)
           .maybeSingle();
 
-        if (!legacyFormError) {
-          slug = legacyFormData?.slug;
+        if (legacyFormError) {
+          return new Response(JSON.stringify({ error: 'Database error' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
         }
+
+        slug = legacyFormData?.slug;
       }
     }
 
-    if (formError || !slug) {
+    if (!slug) {
       return new Response(JSON.stringify({ error: 'QR code not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },

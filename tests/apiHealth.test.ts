@@ -118,6 +118,8 @@ describe('Health Check Endpoint', () => {
   });
 
   it('should include response times for database checks', async () => {
+    vi.useFakeTimers();
+
     mockSupabaseQuery.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -131,11 +133,17 @@ describe('Health Check Endpoint', () => {
       method: 'GET',
     });
 
-    const response = await handler(req);
-    const body = await response.json();
+    try {
+      const responsePromise = handler(req);
+      await vi.advanceTimersByTimeAsync(100);
+      const response = await responsePromise;
+      const body = await response.json();
 
-    expect(body.checks[0].responseTime).toBeGreaterThanOrEqual(100);
-    expect(body.checks[0].responseTime).toBeLessThan(200);
+      expect(body.checks[0].responseTime).toBeGreaterThanOrEqual(100);
+      expect(body.checks[0].responseTime).toBeLessThan(200);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should check environment variables', async () => {
