@@ -272,6 +272,8 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error('fetch forms error', e);
+      // Network failure/timeout can be transient — allow a future retry.
+      setFormsFetchAttempted(false);
       setForms([]);
     }
   };
