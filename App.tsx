@@ -10,7 +10,7 @@ import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRel
 
 
 // Reserved slugs that cannot be used for forms
-const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
 
 // Validate slug format and check against reserved words
 const isValidSlug = (slug: string): boolean => {
@@ -1143,15 +1143,29 @@ const App: React.FC = () => {
     return url.toString();
   };
 
+  const escapeHtmlAttribute = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
   const buildEmbedCode = (form: FormDefinition) => {
-    const title = `${form.name} signing form`;
-    return `<iframe src="${buildEmbedUrl(form.slug)}" title="${title.replace(/"/g, '&quot;')}" width="100%" height="720" style="border:0;max-width:560px;width:100%;" loading="lazy"></iframe>`;
+    const title = escapeHtmlAttribute(`${form.name} signing form`);
+    const src = escapeHtmlAttribute(buildEmbedUrl(form.slug));
+    return `<iframe src="${src}" title="${title}" width="100%" height="720" style="border:0;max-width:560px;width:100%;" loading="lazy"></iframe>`;
   };
 
   const copyEmbedCode = async (form: FormDefinition) => {
-    await navigator.clipboard.writeText(buildEmbedCode(form));
-    setCopiedEmbedId(form.id || null);
-    setTimeout(() => setCopiedEmbedId(prev => prev === form.id ? null : prev), 2000);
+    try {
+      await navigator.clipboard.writeText(buildEmbedCode(form));
+      setCopiedEmbedId(form.id || null);
+      setError(null);
+      setTimeout(() => setCopiedEmbedId(prev => prev === form.id ? null : prev), 2000);
+    } catch {
+      setCopiedEmbedId(null);
+      setError('Could not copy embed code. Please select and copy it manually.');
+    }
   };
 
 

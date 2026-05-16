@@ -99,6 +99,7 @@ describe('routingService public form slug helpers', () => {
     expect(isValidPublicFormSlug('BadSlug')).toBe(false);
     expect(isValidPublicFormSlug('admin')).toBe(false);
     expect(isValidPublicFormSlug('qr')).toBe(false);
+    expect(isValidPublicFormSlug('embed')).toBe(false);
     expect(isValidPublicFormSlug('favicon.ico')).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ const PRIVATE_JSON_HEADERS: HeadersInit = {
   'Cache-Control': 'private, no-store',
 };
 
-const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
 
 function isValidSlug(slug: unknown): slug is string {
   if (typeof slug !== 'string') return false;

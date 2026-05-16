@@ -9,7 +9,7 @@ export interface RouteContext {
   formSlug: string | null;
 }
 
-const RESERVED_FORM_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
+const RESERVED_FORM_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
 
 export function isValidPublicFormSlug(slug: string): boolean {
   if (!slug) return false;
