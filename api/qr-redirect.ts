@@ -27,14 +27,37 @@ export default async function handler(req: Request) {
       });
     }
 
-    // Look up the form by stable ID
+    // Look up current QR records first. Older QR rows can have the stable ID
+    // only in form_qrcodes, so fall back to that table before returning 404.
     const { data: formData, error: formError } = await supabaseServer
       .from('forms')
-      .select('slug')
+      .select('id,slug')
       .eq('qr_stable_id', stableId)
       .maybeSingle();
 
-    if (formError || !formData) {
+    let slug = formData?.slug;
+
+    if (!slug && !formError) {
+      const { data: qrData, error: qrError } = await supabaseServer
+        .from('form_qrcodes')
+        .select('form_id')
+        .eq('stable_id', stableId)
+        .maybeSingle();
+
+      if (qrData?.form_id && !qrError) {
+        const { data: legacyFormData, error: legacyFormError } = await supabaseServer
+          .from('forms')
+          .select('slug')
+          .eq('id', qrData.form_id)
+          .maybeSingle();
+
+        if (!legacyFormError) {
+          slug = legacyFormData?.slug;
+        }
+      }
+    }
+
+    if (formError || !slug) {
       return new Response(JSON.stringify({ error: 'QR code not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
@@ -45,7 +68,7 @@ export default async function handler(req: Request) {
     const baseUrl = /^https?:\/\//i.test(configuredPublicUrl)
       ? configuredPublicUrl
       : 'https://www.signflow.ink';
-    const redirectUrl = `${baseUrl}/${formData.slug}`;
+    const redirectUrl = `${baseUrl}/${slug}`;
 
     return new Response(null, {
       status: 302,

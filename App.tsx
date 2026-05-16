@@ -146,7 +146,7 @@ const App: React.FC = () => {
   
   // Form Details page state
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
-  const [detailsTab, setDetailsTab] = useState<'settings' | 'landing' | 'qr' | 'analytics'>('settings');
+  const [detailsTab, setDetailsTab] = useState<'settings' | 'landing' | 'embed' | 'qr' | 'analytics'>('settings');
   
   // Landing page editor state
   const [landingHeadline, setLandingHeadline] = useState('');
