@@ -2,14 +2,16 @@
 import './index.css';
 import React, { Component, useEffect, type ErrorInfo, type PropsWithChildren } from 'react';
 import ReactDOM from 'react-dom/client';
-import { getPublicFormSlugFromPath, getRouteContext } from './services/routingService';
+import { getEmbedFormSlugFromPath, getPublicFormSlugFromPath, getRouteContext } from './services/routingService';
 
 const AdminApp = React.lazy(() => import('./App'));
 const PublicFormApp = React.lazy(() => import('./PublicFormApp'));
 
 const isPublicFormPath = (path: string): boolean => {
-  return getPublicFormSlugFromPath(path) !== null;
+  return getPublicFormSlugFromPath(path) !== null || getEmbedFormSlugFromPath(path) !== null;
 };
+
+const isEmbedPath = (path: string): boolean => getEmbedFormSlugFromPath(path) !== null;
 
 const AppLoadingFallback: React.FC = () => (
   <div role="status" aria-live="polite" className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -41,6 +43,17 @@ const RoutedApp: React.FC = () => {
 
   const path = window.location.pathname || '/';
   const ActiveApp = isPublicFormPath(path) ? PublicFormApp : AdminApp;
+
+  if (window.self !== window.top && !isEmbedPath(path)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-center text-slate-900">
+        <div className="max-w-md rounded-lg border border-slate-200 bg-white p-8 shadow-xl">
+          <h1 className="mb-3 text-xl font-bold">Embedding blocked</h1>
+          <p className="text-sm text-slate-600">Use the dedicated embed URL for this signing page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <React.Suspense fallback={<AppLoadingFallback />}>

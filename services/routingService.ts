@@ -23,6 +23,13 @@ export function getPublicFormSlugFromPath(pathname: string): string | null {
   return isValidPublicFormSlug(cleanPath) ? cleanPath : null;
 }
 
+export function getEmbedFormSlugFromPath(pathname: string): string | null {
+  const cleanPath = pathname.replace(/^\/+/, '').replace(/\/$/, '');
+  const [, slug, ...rest] = cleanPath.split('/');
+  if (!cleanPath.startsWith('embed/') || !slug || rest.length > 0) return null;
+  return isValidPublicFormSlug(slug) ? slug : null;
+}
+
 export function getSubdomainType(hostname: string): SubdomainType {
   // Local development: treat localhost as www by default, with optional ?subdomain overrides
   if (hostname === 'localhost' || hostname.startsWith('127.0.0.1')) {
@@ -53,7 +60,7 @@ export function getRouteContext(): RouteContext {
   const { hostname, pathname, search, hash } = window.location;
   const subdomain = getSubdomainType(hostname);
 
-  const formSlug = getPublicFormSlugFromPath(pathname);
+  const formSlug = getPublicFormSlugFromPath(pathname) || getEmbedFormSlugFromPath(pathname);
   const isFormSlug = Boolean(formSlug);
 
   return {

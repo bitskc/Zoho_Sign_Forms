@@ -177,6 +177,7 @@ const App: React.FC = () => {
   // UX-01: Inline delete confirmation and copy-link feedback (replaces confirm() / alert())
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [copiedEmbedId, setCopiedEmbedId] = useState<string | null>(null);
 
   
   // Debounce flags to prevent infinite retry loops
@@ -1135,6 +1136,24 @@ const App: React.FC = () => {
     }
   };
 
+  const buildEmbedUrl = (slugValue: string) => {
+    const formUrl = buildFormUrl(slugValue);
+    const url = new URL(formUrl);
+    url.pathname = `/embed/${slugValue}`;
+    return url.toString();
+  };
+
+  const buildEmbedCode = (form: FormDefinition) => {
+    const title = `${form.name} signing form`;
+    return `<iframe src="${buildEmbedUrl(form.slug)}" title="${title.replace(/"/g, '&quot;')}" width="100%" height="720" style="border:0;max-width:560px;width:100%;" loading="lazy"></iframe>`;
+  };
+
+  const copyEmbedCode = async (form: FormDefinition) => {
+    await navigator.clipboard.writeText(buildEmbedCode(form));
+    setCopiedEmbedId(form.id || null);
+    setTimeout(() => setCopiedEmbedId(prev => prev === form.id ? null : prev), 2000);
+  };
+
 
   // UX-03: Root-domain redirect moved here from render body to avoid hooks-rules violation.
   // Runs once on mount; if isRootDomain is true, nothing else is rendered (see guard below).
@@ -1880,6 +1899,7 @@ const App: React.FC = () => {
             {[
               { id: 'settings', label: 'Settings' },
               { id: 'landing', label: 'Landing Page' },
+              { id: 'embed', label: 'Embed' },
               { id: 'qr', label: 'QR Code' },
               { id: 'analytics', label: 'Analytics' }
             ].map(tab => (
@@ -2155,6 +2175,47 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Embed Tab */}
+          {detailsTab === 'embed' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <div className="mb-6">
+                <h2 className={`text-lg font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Embed This Signing Page</h2>
+                <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Copy this iframe into your website to let visitors start signing without leaving your page.</p>
+              </div>
+
+              <div className={`mb-5 rounded-lg border p-4 ${darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                <label htmlFor="embed-code" className={`block text-xs font-semibold uppercase tracking-wide mb-2 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Embed Code</label>
+                <textarea
+                  id="embed-code"
+                  readOnly
+                  value={buildEmbedCode(selectedForm)}
+                  className={`w-full min-h-32 resize-none rounded-lg border p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500 ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copyEmbedCode(selectedForm)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    {copiedEmbedId === selectedForm.id ? 'Copied!' : 'Copy Embed Code'}
+                  </button>
+                  <a
+                    href={buildEmbedUrl(selectedForm.slug)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${darkMode ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    Preview Embed
+                  </a>
+                </div>
+              </div>
+
+              <div className={`rounded-lg border p-4 text-sm ${darkMode ? 'bg-blue-950/30 border-blue-900 text-blue-200' : 'bg-blue-50 border-blue-100 text-blue-800'}`}>
+                Tip: set the iframe height to at least <code className="font-mono">720px</code>. If your website supports responsive embeds, keep <code className="font-mono">width="100%"</code>.
+              </div>
             </div>
           )}
           
