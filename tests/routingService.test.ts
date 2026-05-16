@@ -3,6 +3,7 @@ import {
   getSubdomainType,
   getRouteContext,
   buildFormUrl,
+  getEmbedFormSlugFromPath,
   getPublicFormSlugFromPath,
   isValidPublicFormSlug,
 } from '../services/routingService';
@@ -68,12 +69,19 @@ describe('routingService.getRouteContext', () => {
   });
 
   it('does not treat reserved paths as form slugs', () => {
-    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc']) {
+    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc', '/embed']) {
       mockLocation(`https://www.signflow.ink${path}`);
       const ctx = getRouteContext();
       expect(ctx.isFormSlug).toBe(false);
       expect(ctx.formSlug).toBeNull();
     }
+  });
+
+  it('recognizes embed form routes', () => {
+    mockLocation('https://www.signflow.ink/embed/fbmc');
+    const ctx = getRouteContext();
+    expect(ctx.isFormSlug).toBe(true);
+    expect(ctx.formSlug).toBe('fbmc');
   });
 });
 
@@ -85,11 +93,20 @@ describe('routingService public form slug helpers', () => {
     expect(getPublicFormSlugFromPath('/')).toBeNull();
   });
 
+  it('accepts only /embed/:slug embed paths', () => {
+    expect(getEmbedFormSlugFromPath('/embed/fbmc')).toBe('fbmc');
+    expect(getEmbedFormSlugFromPath('/embed/fbmc/')).toBe('fbmc');
+    expect(getEmbedFormSlugFromPath('/embed/admin')).toBeNull();
+    expect(getEmbedFormSlugFromPath('/embed/fbmc/extra')).toBeNull();
+    expect(getEmbedFormSlugFromPath('/fbmc')).toBeNull();
+  });
+
   it('rejects invalid and reserved public form slugs', () => {
     expect(isValidPublicFormSlug('fbmc-short')).toBe(true);
     expect(isValidPublicFormSlug('BadSlug')).toBe(false);
     expect(isValidPublicFormSlug('admin')).toBe(false);
     expect(isValidPublicFormSlug('qr')).toBe(false);
+    expect(isValidPublicFormSlug('embed')).toBe(false);
     expect(isValidPublicFormSlug('favicon.ico')).toBe(false);
   });
 });

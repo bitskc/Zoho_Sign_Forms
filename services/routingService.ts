@@ -9,7 +9,7 @@ export interface RouteContext {
   formSlug: string | null;
 }
 
-const RESERVED_FORM_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr'];
+const RESERVED_FORM_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
 
 export function isValidPublicFormSlug(slug: string): boolean {
   if (!slug) return false;
@@ -21,6 +21,13 @@ export function getPublicFormSlugFromPath(pathname: string): string | null {
   const cleanPath = pathname.substring(1).replace(/\/$/, '');
   if (!cleanPath || cleanPath.includes('/')) return null;
   return isValidPublicFormSlug(cleanPath) ? cleanPath : null;
+}
+
+export function getEmbedFormSlugFromPath(pathname: string): string | null {
+  const cleanPath = pathname.replace(/^\/+/, '').replace(/\/$/, '');
+  const [, slug, ...rest] = cleanPath.split('/');
+  if (!cleanPath.startsWith('embed/') || !slug || rest.length > 0) return null;
+  return isValidPublicFormSlug(slug) ? slug : null;
 }
 
 export function getSubdomainType(hostname: string): SubdomainType {
@@ -53,7 +60,7 @@ export function getRouteContext(): RouteContext {
   const { hostname, pathname, search, hash } = window.location;
   const subdomain = getSubdomainType(hostname);
 
-  const formSlug = getPublicFormSlugFromPath(pathname);
+  const formSlug = getPublicFormSlugFromPath(pathname) || getEmbedFormSlugFromPath(pathname);
   const isFormSlug = Boolean(formSlug);
 
   return {
