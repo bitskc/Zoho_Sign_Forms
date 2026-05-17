@@ -62,7 +62,7 @@ const PublicFormApp: React.FC = () => {
         }
 
         const data = await res.json();
-        setCurrentForm(data);
+        setCurrentForm({ ...data, requestedSlug: slug } as FormDefinition);
       } catch {
         setError('Unable to load this signing page right now. Please try again.');
         setNotFound(true);

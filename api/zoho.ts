@@ -8,10 +8,23 @@ import {
   cleanupRateLimitStore
 } from './utils/rateLimiter.js';
 import { validateZohoDomain, DomainValidationError } from './utils/domainValidator.js';
+import { isMissingSlugAliasTableError } from './utils/slugAlias.js';
 
 export const config = {
   runtime: 'edge',
 };
+
+async function slugBelongsToForm(formId: string, slug: string): Promise<boolean> {
+  const { data, error } = await supabaseServer
+    .from('form_slug_aliases')
+    .select('form_id')
+    .eq('old_slug', slug)
+    .maybeSingle();
+
+  if (error && isMissingSlugAliasTableError(error)) return false;
+  if (error) throw error;
+  return data?.form_id === formId;
+}
 
 const JSON_NO_STORE_HEADERS: HeadersInit = {
   'Content-Type': 'application/json',
@@ -110,9 +123,12 @@ export default async function handler(req: Request) {
       templateId: body.templateId?.slice?.(0, 8),
     }));
 
+    const { formId, slug, templateId, signer, roleName, isTest, accessToken: providedAccessToken,
+      clientId: providedClientId, clientSecret: providedClientSecret } = body;
+
     const routeLimitId = action === 'exchange'
       ? 'exchange'
-      : (body.formId || body.slug || body.templateId || 'unknown');
+      : (formId || slug || templateId || 'unknown');
     const rateLimitKey = `${getRateLimitKey(req)}:zoho:${routeLimitId}`;
     const rateLimitCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.ZOHO_API);
 
@@ -171,9 +187,6 @@ export default async function handler(req: Request) {
     }
 
     // --- CASE 2: Standard Sign Request ---
-    const { formId, slug, templateId, signer, roleName, isTest, accessToken: providedAccessToken,
-      clientId: providedClientId, clientSecret: providedClientSecret } = body;
-
     const authHeader = req.headers.get('Authorization');
     let authedUserId: string | null = null;
     if (authHeader?.startsWith('Bearer ')) {
@@ -251,8 +264,10 @@ export default async function handler(req: Request) {
     }
 
     if (formId && slug && formRow.slug !== slug) {
-      logResponse(404);
-      return jsonResponse(404, { error: 'Form not found' });
+      if (!(await slugBelongsToForm(formRow.id, slug))) {
+        logResponse(404);
+        return jsonResponse(404, { error: 'Form not found' });
+      }
     }
 
     const allowClientOverrides = Boolean(authedUserId && authedUserId === formRow.user_id);

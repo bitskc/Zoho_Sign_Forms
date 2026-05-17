@@ -70,6 +70,15 @@ describe('/api/qr-redirect', () => {
     expect(res.headers.get('Location')).toBe('https://www.signflow.ink/current-form');
   });
 
+  it('redirects QR codes from the production rewrite query parameter', async () => {
+    const res = await handler(new Request('https://www.signflow.ink/api/qr-redirect?id=qr-current', {
+      headers: { 'x-forwarded-for': '192.0.2.7' },
+    }));
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://www.signflow.ink/current-form');
+  });
+
   it('redirects existing QR codes stored only in form_qrcodes', async () => {
     const res = await handler(new Request('https://www.signflow.ink/qr/qr-legacy', {
       headers: { 'x-forwarded-for': '192.0.2.2' },
