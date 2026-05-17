@@ -2,6 +2,7 @@ import { supabaseServer } from './_supabaseServer.js';
 import { checkRateLimit, createRateLimitResponse, getRateLimitKey, RATE_LIMITS } from './utils/rateLimiter.js';
 import { validateUrl, getUrlValidationError } from './utils/urlValidator.js';
 import { getUserFromAuthHeader } from './utils/auth.js';
+import { isMissingSlugAliasTableError } from './utils/slugAlias.js';
 
 export const config = { runtime: 'edge' };
 
@@ -22,14 +23,6 @@ function isValidSlug(slug: unknown): slug is string {
   if (typeof slug !== 'string') return false;
   if (!/^[a-z0-9-]+$/.test(slug)) return false;
   return !RESERVED_SLUGS.includes(slug.toLowerCase());
-}
-
-function isMissingSlugAliasTableError(error: any): boolean {
-  const message = String(error?.message || '').toLowerCase();
-  return error?.code === '42P01'
-    || message.includes('relation "form_slug_aliases" does not exist')
-    || message.includes("could not find the table 'form_slug_aliases'")
-    || message.includes("could not find the table 'public.form_slug_aliases'");
 }
 
 function isMissingPublicFormColumnError(error: any): boolean {
@@ -121,7 +114,6 @@ function toCamel(record: any, options?: { publicView?: boolean }) {
     }),
     landingConfig: landingConfig || undefined,
     ...(publicView ? {} : {
-      qrCodeData: record.form_qrcodes?.[0]?.qr_code_data,
       qrStableIdFromDb: record.form_qrcodes?.[0]?.stable_id,
       qrCreatedAt: record.form_qrcodes?.[0]?.created_at,
     })

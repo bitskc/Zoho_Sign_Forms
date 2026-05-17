@@ -8,18 +8,11 @@ import {
   cleanupRateLimitStore
 } from './utils/rateLimiter.js';
 import { validateZohoDomain, DomainValidationError } from './utils/domainValidator.js';
+import { isMissingSlugAliasTableError } from './utils/slugAlias.js';
 
 export const config = {
   runtime: 'edge',
 };
-
-function isMissingSlugAliasTableError(error: any): boolean {
-  const message = String(error?.message || '').toLowerCase();
-  return error?.code === '42P01'
-    || message.includes('relation "form_slug_aliases" does not exist')
-    || message.includes("could not find the table 'form_slug_aliases'")
-    || message.includes("could not find the table 'public.form_slug_aliases'");
-}
 
 async function slugBelongsToForm(formId: string, slug: string): Promise<boolean> {
   const { data, error } = await supabaseServer
