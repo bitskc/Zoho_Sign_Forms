@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ViewMode, FormDefinition, SignerData, UserCredentials, SubscriptionPlan } from './types';
 import Header from './components/Header';
 import QRCodeModal from './components/QRCodeModal';
-import { triggerZohoSignTemplate, testZohoConnection } from './services/zohoService';
+import { triggerZohoSignTemplate, testZohoConnection, fetchTemplateRoles, TemplateRole } from './services/zohoService';
 import { supabase } from './services/supabaseClient';
 import { getRouteContext, buildFormUrl } from './services/routingService';
 import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRelativeLuminance } from './utils/accessibility';
@@ -146,7 +146,7 @@ const App: React.FC = () => {
   
   // Form Details page state
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
-  const [detailsTab, setDetailsTab] = useState<'settings' | 'landing' | 'embed' | 'qr' | 'analytics'>('settings');
+  const [detailsTab, setDetailsTab] = useState<'settings' | 'landing' | 'signers' | 'embed' | 'qr' | 'analytics'>('settings');
   
   // Landing page editor state
   const [landingHeadline, setLandingHeadline] = useState('');
@@ -166,6 +166,15 @@ const App: React.FC = () => {
   const [landingLogoAlt, setLandingLogoAlt] = useState('');
   const [contrastWarning, setContrastWarning] = useState<string | null>(null);
   const [altTextError, setAltTextError] = useState<string | null>(null);
+
+  // Signers & Delivery editor state
+  // templateRoles: roles fetched live from the Zoho template (with action type + isPublic flag).
+  // signerRoles: the admin-edited per-role config (recipient + delivery mode) for non-public roles.
+  // signerNotes: optional override for the Zoho request notes.
+  const [templateRoles, setTemplateRoles] = useState<TemplateRole[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [signerRoles, setSignerRoles] = useState<Record<string, { recipientName: string; recipientEmail: string; deliveryMode: 'embedded' | 'email' }>>({});
+  const [signerNotes, setSignerNotes] = useState('');
   
   // QR Code and Analytics states (legacy - keeping for compatibility)
   const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
@@ -229,6 +238,37 @@ const App: React.FC = () => {
         newSet.delete(formId);
         return newSet;
       });
+    }
+  };
+
+  // Fetch the roles defined in a Zoho Sign template so the admin can configure
+  // signers/delivery per role. Merges any saved signer_config into the editor.
+  const loadTemplateRoles = async (form: FormDefinition) => {
+    if (!sessionToken || !form.id) return;
+    setLoadingRoles(true);
+    try {
+      const result = await fetchTemplateRoles(form.id, sessionToken);
+      if (result.success && result.roles) {
+        setTemplateRoles(result.roles);
+        // Seed editor state from saved config (non-public roles only).
+        const saved = form.signerConfig;
+        const seeded: Record<string, { recipientName: string; recipientEmail: string; deliveryMode: 'embedded' | 'email' }> = {};
+        for (const role of result.roles) {
+          if (role.isPublic) continue;
+          const cfg = saved?.roles?.find(r => r.role.toLowerCase() === role.role.toLowerCase());
+          seeded[role.role] = {
+            recipientName: cfg?.recipientName || '',
+            recipientEmail: cfg?.recipientEmail || '',
+            deliveryMode: cfg?.deliveryMode || 'email',
+          };
+        }
+        setSignerRoles(seeded);
+        setSignerNotes(saved?.notes || '');
+      } else if (result.error) {
+        setError(result.error);
+      }
+    } finally {
+      setLoadingRoles(false);
     }
   };
 
@@ -719,6 +759,10 @@ const App: React.FC = () => {
     // Clear accessibility errors
     setContrastWarning(null);
     setAltTextError(null);
+    // Clear signers & delivery state
+    setTemplateRoles([]);
+    setSignerRoles({});
+    setSignerNotes('');
   };
 
   const startEdit = (form: FormDefinition) => {
@@ -759,7 +803,21 @@ const App: React.FC = () => {
     setLandingContactPhone(lc.contact?.phone || '');
     setLandingFooterText(lc.footerText || '');
     setLandingShowPoweredBy(lc.showPoweredBy !== false);
-    
+
+    // Reset signers & delivery state; roles are loaded on-demand when the tab is opened.
+    setTemplateRoles([]);
+    setSignerNotes(form.signerConfig?.notes || '');
+    const seeded: Record<string, { recipientName: string; recipientEmail: string; deliveryMode: 'embedded' | 'email' }> = {};
+    for (const r of form.signerConfig?.roles || []) {
+      if (r.isPublic) continue;
+      seeded[r.role] = {
+        recipientName: r.recipientName || '',
+        recipientEmail: r.recipientEmail || '',
+        deliveryMode: r.deliveryMode || 'email',
+      };
+    }
+    setSignerRoles(seeded);
+
     setError(null);
     setView(ViewMode.FORM_DETAILS);
     window.location.hash = `#/admin/form/${form.id}`;
@@ -820,6 +878,27 @@ const App: React.FC = () => {
     
     // P2-03: For new forms, omit id — server generates it via gen_random_uuid().
     // For updates (editingId is set), include id so the server routes to UPDATE path.
+    // Build signer/delivery config from the editor when roles have been loaded;
+    // otherwise preserve any existing config so saving from another tab doesn't wipe it.
+    const signerConfig = templateRoles.length > 0
+      ? {
+          notes: signerNotes.trim() || undefined,
+          roles: templateRoles
+            .filter(r => !r.isPublic)
+            .map(r => {
+              const ed = signerRoles[r.role] || { recipientName: '', recipientEmail: '', deliveryMode: 'email' as const };
+              return {
+                role: r.role,
+                actionType: r.actionType,
+                recipientName: ed.recipientName.trim() || undefined,
+                recipientEmail: ed.recipientEmail.trim() || undefined,
+                deliveryMode: ed.deliveryMode,
+                isPublic: false,
+              };
+            }),
+        }
+      : currentForm?.signerConfig;
+
     const formDef: FormDefinition = {
       ...(editingId ? { id: editingId } : {}),
       name: formName.trim(),
@@ -829,6 +908,7 @@ const App: React.FC = () => {
       apiDomain: apiDomain.trim(),
       // userId and accessToken removed — server resolves ownership from JWT (P1-02 / P3-04)
       createdAt: editingId ? (forms.find(f => f.id === editingId)?.createdAt || Date.now()) : Date.now(),
+      signerConfig,
       // Include landing config if any values are set
       landingConfig: (landingHeadline || landingDescription || landingLogoUrl || landingLogoAlt || landingCompanyName || landingContactEmail || landingContactPhone || landingFooterText || landingPrimaryColor !== '#3B82F6' || landingBackgroundColor !== '#F8FAFC' || landingCardColor !== '#FFFFFF' || landingButtonText !== 'Sign Now' || !landingShowPoweredBy) ? {
         headline: landingHeadline || undefined,
@@ -908,6 +988,20 @@ const App: React.FC = () => {
       setLandingContactPhone(lc.contact?.phone || '');
       setLandingFooterText(lc.footerText || '');
       setLandingShowPoweredBy(lc.showPoweredBy !== false);
+
+      // Refresh signers & delivery editor from the saved config. Roles list is
+      // kept as-is (already loaded); only the per-role edits are re-seeded.
+      setSignerNotes(saved.signerConfig?.notes || '');
+      const reseeded: Record<string, { recipientName: string; recipientEmail: string; deliveryMode: 'embedded' | 'email' }> = {};
+      for (const r of saved.signerConfig?.roles || []) {
+        if (r.isPublic) continue;
+        reseeded[r.role] = {
+          recipientName: r.recipientName || '',
+          recipientEmail: r.recipientEmail || '',
+          deliveryMode: r.deliveryMode || 'email',
+        };
+      }
+      setSignerRoles(reseeded);
     } else {
       // Not viewing the saved form's details in-place — clear the editor for a fresh state
       clearForm();
@@ -1913,6 +2007,7 @@ const App: React.FC = () => {
             {[
               { id: 'settings', label: 'Settings' },
               { id: 'landing', label: 'Landing Page' },
+              { id: 'signers', label: 'Signers & Delivery' },
               { id: 'embed', label: 'Embed' },
               { id: 'qr', label: 'QR Code' },
               { id: 'analytics', label: 'Analytics' }
@@ -1928,6 +2023,10 @@ const App: React.FC = () => {
                   // Load QR data on-demand when QR tab is opened
                   if (tab.id === 'qr' && selectedForm && !qrCodes.has(selectedForm.id) && !loadingQR.has(selectedForm.id)) {
                     fetchQRCode(selectedForm.id);
+                  }
+                  // Load Zoho template roles on-demand when Signers tab is opened
+                  if (tab.id === 'signers' && selectedForm && templateRoles.length === 0 && !loadingRoles) {
+                    loadTemplateRoles(selectedForm);
                   }
                 }}
                 className={`flex-1 px-4 py-2.5 rounded-md text-sm font-semibold transition-colors ${
@@ -2189,6 +2288,112 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Signers & Delivery Tab */}
+          {detailsTab === 'signers' && (
+            <div className={`${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} p-6 rounded-xl border`}>
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
+                <h2 className={`text-lg font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>Signers &amp; Delivery</h2>
+                <button
+                  type="button"
+                  onClick={() => selectedForm && loadTemplateRoles(selectedForm)}
+                  disabled={loadingRoles || !selectedForm}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 ${darkMode ? 'bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-100 text-slate-900 hover:bg-slate-200'}`}
+                >
+                  {loadingRoles ? 'Loading…' : (templateRoles.length > 0 ? 'Refresh roles from Zoho' : 'Load roles from Zoho')}
+                </button>
+              </div>
+              <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Override who fills each role of your Zoho Sign template. The public signer role (collected from the public form) is shown for reference. For other roles, set a recipient and choose whether Zoho emails them or delivers an embedded signing link.
+              </p>
+
+              {templateRoles.length === 0 && !loadingRoles && (
+                <div className={`p-4 rounded-lg text-sm ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-50 text-slate-600'}`}>
+                  Click <strong>Load roles from Zoho</strong> to fetch the roles defined in this form&apos;s template.
+                </div>
+              )}
+
+              {templateRoles.length > 0 && (
+                <form onSubmit={saveForm} className="space-y-5">
+                  <div className="space-y-4">
+                    {templateRoles.map(role => {
+                      const ed = signerRoles[role.role] || { recipientName: '', recipientEmail: '', deliveryMode: 'email' as const };
+                      const actionLabel = role.actionType === 'VIEW' ? 'Receives a copy' : role.actionType === 'APPROVER' ? 'Approver' : role.actionType === 'INPERSONSIGN' ? 'In-person signer' : 'Signer';
+                      return (
+                        <div key={role.role} className={`p-4 rounded-lg border ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-bold ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>{role.role || '(unnamed role)'}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-white text-slate-600 border border-slate-200'}`}>{actionLabel}</span>
+                              {role.isPublic && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>Public signer</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {role.isPublic ? (
+                            <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                              Collected from the public form at submit time. No configuration needed here.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Recipient Name</label>
+                                <input
+                                  value={ed.recipientName}
+                                  onChange={e => setSignerRoles(prev => ({ ...prev, [role.role]: { ...ed, recipientName: e.target.value } }))}
+                                  placeholder="e.g., Jane Reviewer"
+                                  className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Recipient Email</label>
+                                <input
+                                  type="email"
+                                  value={ed.recipientEmail}
+                                  onChange={e => setSignerRoles(prev => ({ ...prev, [role.role]: { ...ed, recipientEmail: e.target.value } }))}
+                                  placeholder="jane@example.com"
+                                  className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Delivery</label>
+                                <select
+                                  value={ed.deliveryMode}
+                                  onChange={e => setSignerRoles(prev => ({ ...prev, [role.role]: { ...ed, deliveryMode: e.target.value as 'embedded' | 'email' } }))}
+                                  className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`}
+                                >
+                                  <option value="email">Email (Zoho sends)</option>
+                                  <option value="embedded">Embedded (inline link)</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Notes to recipients (optional)</label>
+                    <textarea
+                      value={signerNotes}
+                      onChange={e => setSignerNotes(e.target.value)}
+                      placeholder="Message included with the signing request"
+                      rows={3}
+                      className={`w-full px-3 py-2 rounded-lg text-sm outline-none border ${darkMode ? 'bg-slate-900 border-slate-700 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+                      {loading ? 'Saving...' : 'Save Signers & Delivery'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 
