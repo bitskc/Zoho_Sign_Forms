@@ -135,9 +135,57 @@ export const exchangeToken = async (
  */
 export const testZohoConnection = async (form: FormDefinition, creds?: ZohoCreds) => {
   return triggerZohoSignTemplate(
-    form, 
+    form,
     { name: "System Test", email: "test@example.com" },
     true,
     creds
   );
+};
+
+/**
+ * A single role returned by the Zoho template lookup.
+ */
+export interface TemplateRole {
+  role: string;
+  actionType: 'SIGN' | 'VIEW' | 'APPROVER' | 'INPERSONSIGN';
+  actionId: string;
+  isPublic: boolean;
+}
+
+/**
+ * Fetch the roles (actions) defined in a Zoho Sign template so the admin can
+ * configure signers/delivery per role. Requires the form owner's session token.
+ */
+export const fetchTemplateRoles = async (
+  formId: string,
+  sessionToken: string,
+  creds?: ZohoCreds
+): Promise<{ success: boolean; roles?: TemplateRole[]; error?: string }> => {
+  try {
+    const payload: Record<string, unknown> = {
+      action: 'template',
+      formId,
+    };
+    if (creds?.apiDomain) payload.apiDomain = creds.apiDomain;
+    if (creds?.clientId) payload.clientId = creds.clientId;
+    if (creds?.clientSecret) payload.clientSecret = creds.clientSecret;
+    if (creds?.refreshToken) payload.refreshToken = creds.refreshToken;
+
+    const response = await fetch('/api/zoho', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return { success: false, error: data.message || data.error || `Zoho Error (${response.status})` };
+    }
+    return { success: true, roles: data.roles || [] };
+  } catch (error) {
+    return { success: false, error: `Bridge Error: ${(error as Error).message}` };
+  }
 };

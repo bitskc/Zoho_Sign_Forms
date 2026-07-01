@@ -43,6 +43,7 @@ export interface FormDefinition {
   createdAt?: number | null;
   qrStableId?: string; // Permanent QR code identifier used by the app (preferred field)
   landingConfig?: LandingConfig; // Landing page customization
+  signerConfig?: SignerConfig; // Per-role signer/delivery overrides (excludes the public signer role)
   qrCodeData?: string; // URL to QR code image (e.g., https://api.qrserver.com/...)
   qrStableIdFromDb?: string; // Raw stable ID loaded from the database (used for sync/migrations)
   qrCreatedAt?: string; // QR code creation timestamp
@@ -77,6 +78,46 @@ export interface ServerSettings {
 export interface SignerData {
   name: string;
   email: string;
+}
+
+/**
+ * Delivery mode for a configured role.
+ * - "embedded": Zoho returns an inline signing URL (current behavior).
+ * - "email":    Zoho emails the signing request to the recipient; no embed token is fetched.
+ */
+export type DeliveryMode = 'embedded' | 'email';
+
+/**
+ * Admin-configured override for a single template role.
+ *
+ * The public signer's role (matched by FormDefinition.roleName) is NOT stored
+ * here — it is collected from the public form at submit time. Only the
+ * additional/internal roles (other signers, approvers, and "receives a copy"
+ * / VIEW recipients) are configured by the admin.
+ */
+export interface SignerRoleConfig {
+  /** Template role name; must match a role returned by the Zoho template. */
+  role: string;
+  /** Template action type for this role. Preserved as-is from the template. */
+  actionType: 'SIGN' | 'VIEW' | 'APPROVER' | 'INPERSONSIGN';
+  /** Fixed recipient name (admin-configured). */
+  recipientName?: string;
+  /** Fixed recipient email (admin-configured). */
+  recipientEmail?: string;
+  /** How this role receives the request. Defaults to "email" for non-public roles. */
+  deliveryMode?: DeliveryMode;
+  /** True if this role is filled by the public submitter (read-only in UI). */
+  isPublic?: boolean;
+}
+
+/**
+ * Per-form signer/delivery configuration stored in the forms.signer_config column.
+ */
+export interface SignerConfig {
+  /** Optional override for the Zoho request notes sent to all recipients. */
+  notes?: string;
+  /** Configured overrides for each non-public template role. */
+  roles: SignerRoleConfig[];
 }
 
 export interface SubmissionResponse {

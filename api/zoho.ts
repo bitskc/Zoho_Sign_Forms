@@ -186,6 +186,124 @@ export default async function handler(req: Request) {
       }
     }
 
+    // --- CASE 1b: Fetch template roles (admin UI) ---
+    // Returns the template's actions (roles) so the admin can configure
+    // signers/delivery per role. Requires authentication and a formId whose
+    // owner matches the authenticated user (credentials are resolved from the
+    // form owner's stored Zoho credentials).
+    if (action === 'template') {
+      const authHeader = req.headers.get('Authorization');
+      let authedUserId: string | null = null;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice('Bearer '.length);
+        const { data: authData, error: authErr } = await supabaseServer.auth.getUser(token);
+        if (!authErr && authData.user) {
+          authedUserId = authData.user.id;
+        }
+      }
+      if (!authedUserId) {
+        logResponse(401);
+        return jsonResponse(401, { error: 'Unauthorized' });
+      }
+      if (!formId) {
+        logResponse(400);
+        return jsonResponse(400, { error: 'Missing data', message: 'formId is required to load template roles.' });
+      }
+
+      const { data: tplFormRow, error: tplFormErr } = await supabaseServer
+        .from('forms')
+        .select('id,user_id,template_id,role_name,api_domain')
+        .eq('id', formId)
+        .maybeSingle();
+      if (tplFormErr || !tplFormRow) {
+        logResponse(404);
+        return jsonResponse(404, { error: 'Form not found' });
+      }
+      if (tplFormRow.user_id !== authedUserId) {
+        logResponse(403);
+        return jsonResponse(403, { error: 'Forbidden' });
+      }
+
+      const tplTemplateId = (templateId || tplFormRow.template_id || '').trim();
+      if (!tplTemplateId) {
+        logResponse(400);
+        return jsonResponse(400, { error: 'Missing data', message: 'Template ID is not configured for this form.' });
+      }
+
+      let tplDomain = 'https://sign.zoho.com';
+      try {
+        tplDomain = validateZohoDomain(
+          String(apiDomain || tplFormRow.api_domain || 'https://sign.zoho.com').replace(/\/+$/, '').trim()
+        );
+      } catch (e) {
+        if (e instanceof DomainValidationError) {
+          logResponse(400);
+          return jsonResponse(400, { error: 'Invalid API domain' });
+        }
+        throw e;
+      }
+
+      const { data: credRow } = await supabaseServer
+        .from('user_credentials')
+        .select('zoho_client_id,zoho_client_secret,zoho_refresh_token,api_domain')
+        .eq('user_id', tplFormRow.user_id)
+        .maybeSingle();
+
+      const tplClientId = providedClientId || resolvedClientId || credRow?.zoho_client_id;
+      const tplClientSecret = providedClientSecret || resolvedClientSecret || credRow?.zoho_client_secret;
+      const tplRefreshToken = refreshToken || credRow?.zoho_refresh_token;
+      if (!tplClientId || !tplClientSecret || !tplRefreshToken) {
+        logResponse(400);
+        return jsonResponse(400, {
+          error: 'Missing credentials',
+          message: 'Server-side Zoho credentials are missing for this form owner.',
+        });
+      }
+
+      const refreshParams = new URLSearchParams();
+      refreshParams.append('refresh_token', tplRefreshToken);
+      refreshParams.append('client_id', tplClientId);
+      refreshParams.append('client_secret', tplClientSecret);
+      refreshParams.append('grant_type', 'refresh_token');
+
+      let tplAccessToken: string;
+      try {
+        const authData = await getOAuthToken(refreshParams, tplDomain);
+        tplAccessToken = String(authData.access_token || '');
+      } catch {
+        logResponse(401);
+        return jsonResponse(401, {
+          error: 'Authentication Failure',
+          message: 'OAuth token refresh failed. Check your server-side Zoho credentials.',
+        });
+      }
+
+      const tplResponse = await fetchWithTimeout(`${tplDomain}/api/v1/templates/${tplTemplateId}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Zoho-oauthtoken ${tplAccessToken}` },
+      }, ZOHO_API_TIMEOUT_MS);
+
+      if (!tplResponse.ok) {
+        logResponse(400, { stage: 'template_lookup', zohoStatus: tplResponse.status });
+        return jsonResponse(400, {
+          error: 'Template fetch failed',
+          message: `Zoho template lookup failed with status ${tplResponse.status}`,
+        });
+      }
+
+      const tplData = await tplResponse.json().catch(() => ({}));
+      const tplActions = (tplData as any)?.templates?.actions || [];
+      const roles = tplActions.map((a: any) => ({
+        role: a.role || '',
+        actionType: a.action_type || 'SIGN',
+        actionId: a.action_id || '',
+        isPublic: (a.role || '').trim().toLowerCase() === String(tplFormRow.role_name || '').trim().toLowerCase(),
+      }));
+
+      logResponse(200, { action: 'template', roleCount: roles.length });
+      return jsonResponse(200, { templateId: tplTemplateId, roleName: tplFormRow.role_name, roles });
+    }
+
     // --- CASE 2: Standard Sign Request ---
     const authHeader = req.headers.get('Authorization');
     let authedUserId: string | null = null;
@@ -216,33 +334,36 @@ export default async function handler(req: Request) {
     }
 
     // Resolve form/owner from formId or slug. Authenticated test calls may use templateId for compatibility.
-    let formRow: { id: string; user_id: string; slug: string; template_id: string; role_name: string; api_domain: string | null } | null = null;
+    let formRow: { id: string; user_id: string; slug: string; template_id: string; role_name: string; api_domain: string | null; signer_config?: any } | null = null;
+
+    const FORM_SELECT_WITH_SIGNER = 'id,user_id,slug,template_id,role_name,api_domain,signer_config';
+    const FORM_SELECT_BASIC = 'id,user_id,slug,template_id,role_name,api_domain';
+    const isMissingSignerConfig = (err: any) => String(err?.message || '').includes('signer_config');
+
+    const lookupForm = async (column: 'id' | 'slug' | 'template_id', value: string, limitOne = false) => {
+      let q = supabaseServer.from('forms').select(FORM_SELECT_WITH_SIGNER).eq(column, value);
+      if (limitOne) q = q.limit(1);
+      const result = await q.maybeSingle();
+      if (result.error && isMissingSignerConfig(result.error)) {
+        let q2 = supabaseServer.from('forms').select(FORM_SELECT_BASIC).eq(column, value);
+        if (limitOne) q2 = q2.limit(1);
+        return await q2.maybeSingle();
+      }
+      return result;
+    };
 
     if (formId) {
-      const { data, error } = await supabaseServer
-        .from('forms')
-        .select('id,user_id,slug,template_id,role_name,api_domain')
-        .eq('id', formId)
-        .maybeSingle();
+      const { data, error } = await lookupForm('id', formId);
       if (!error && data) {
         formRow = data;
       }
     } else if (slug) {
-      const { data, error } = await supabaseServer
-        .from('forms')
-        .select('id,user_id,slug,template_id,role_name,api_domain')
-        .eq('slug', slug)
-        .maybeSingle();
+      const { data, error } = await lookupForm('slug', slug);
       if (!error && data) {
         formRow = data;
       }
     } else if (templateId && authedUserId) {
-      const { data, error } = await supabaseServer
-        .from('forms')
-        .select('id,user_id,slug,template_id,role_name,api_domain')
-        .eq('template_id', templateId)
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await lookupForm('template_id', templateId, true);
       if (!error && data) {
         formRow = data;
       }
@@ -388,22 +509,74 @@ export default async function handler(req: Request) {
       });
     }
 
+    // Parse admin-configured signer/delivery overrides (snake_case from DB).
+    // The public signer role is excluded from stored config; it is filled from
+    // the submitter. Other roles may be overridden with a fixed recipient and
+    // delivery mode (embedded vs email).
+    const storedSignerConfig = formRow.signer_config;
+    const configRolesByName = new Map<string, any>();
+    if (storedSignerConfig && Array.isArray(storedSignerConfig.roles)) {
+      for (const r of storedSignerConfig.roles) {
+        if (r && typeof r.role === 'string') {
+          configRolesByName.set(r.role.trim().toLowerCase(), r);
+        }
+      }
+    }
+    const configNotes = storedSignerConfig?.notes && typeof storedSignerConfig.notes === 'string'
+      ? storedSignerConfig.notes.trim()
+      : '';
+
+    // Build the actions array from every template role. The public signer role
+    // is filled from the submitter; other roles use admin config when present
+    // and otherwise fall back to the template's default recipient.
+    const builtActions = actions.map((a: any) => {
+      const role = a.role || '';
+      const isPublicRole = role.trim().toLowerCase() === cleanRoleName.toLowerCase();
+      const actionType = a.action_type || 'SIGN';
+
+      if (isPublicRole) {
+        return {
+          recipient_name: signer.name,
+          recipient_email: signer.email,
+          action_type: actionType,
+          action_id: a.action_id,
+          role,
+          verify_recipient: false,
+          is_embedded: true,
+        };
+      }
+
+      const cfg = configRolesByName.get(role.trim().toLowerCase());
+      const recipientName = cfg?.recipient_name || a.recipient_name || '';
+      const recipientEmail = cfg?.recipient_email || a.recipient_email || '';
+      const deliveryMode = cfg?.delivery_mode || 'email';
+      const isEmbedded = deliveryMode === 'embedded';
+
+      if (cfg && (!recipientName || !recipientEmail)) {
+        logger.warn('Signer config missing recipient for role; falling back to template default', {
+          role,
+          hasName: Boolean(recipientName),
+          hasEmail: Boolean(recipientEmail),
+        });
+      }
+
+      return {
+        recipient_name: recipientName,
+        recipient_email: recipientEmail,
+        action_type: actionType,
+        action_id: a.action_id,
+        role,
+        verify_recipient: false,
+        is_embedded: isEmbedded,
+      };
+    });
+
     const endpoint = `${cleanDomain}/api/v1/templates/${cleanTemplateId}/createdocument`;
 
     const payload = {
       templates: {
         request_name: isTest ? `TEST - ${new Date().toLocaleTimeString()}` : `Signature Request - ${signer.name}`,
-        actions: [
-          {
-            recipient_name: signer.name,
-            recipient_email: signer.email,
-            action_type: 'SIGN',
-            action_id: matchedAction.action_id,
-            role: matchedAction.role,
-            verify_recipient: false,
-            is_embedded: true
-          }
-        ],
+        actions: builtActions,
         field_data: {
           field_text_data: {
             'Signer Name': signer.name,
@@ -411,7 +584,7 @@ export default async function handler(req: Request) {
             'Name': signer.name
           }
         },
-        notes: 'Generated via SignFlow Pro - direct link'
+        notes: configNotes || 'Generated via SignFlow Pro - direct link'
       }
     };
 
@@ -439,15 +612,19 @@ export default async function handler(req: Request) {
       data.debug_hint = `ROLE ERROR: The role name '${cleanRoleName}' was not found in template ${cleanTemplateId}.`;
     }
 
-    // For embedded signing, call embedtoken endpoint to get final signing URL.
+    // For embedded signing, call embedtoken to get the inline signing URL for
+    // the PUBLIC signer's action (the one the submitter completes inline).
+    // Email-delivery roles do not need an embed token.
     if (response.ok && data.requests) {
       const request = data.requests;
       const respActions = request?.actions || [];
-      const action = respActions[0];
+      const publicRespAction = respActions.find((a: any) =>
+        (a.role || '').trim().toLowerCase() === cleanRoleName.toLowerCase()
+      ) || respActions[0];
 
-      if (action?.action_id && request?.request_id) {
+      if (publicRespAction?.action_id && request?.request_id) {
         const host = process.env.PUBLIC_URL || 'https://www.signflow.ink';
-        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${action.action_id}/embedtoken`;
+        const embedUrl = `${cleanDomain}/api/v1/requests/${request.request_id}/actions/${publicRespAction.action_id}/embedtoken`;
 
         try {
           const embedResponse = await fetchWithTimeout(embedUrl, {
@@ -462,7 +639,7 @@ export default async function handler(req: Request) {
           if (embedResponse.ok) {
             const embedData = await embedResponse.json();
             if (embedData.sign_url) {
-              action.signing_url = embedData.sign_url;
+              publicRespAction.signing_url = embedData.sign_url;
             }
           } else {
             logger.warn('Embed token request failed; continuing with email fallback', {
@@ -482,7 +659,7 @@ export default async function handler(req: Request) {
         logResponse(response.status, { stage: 'zoho_submit' });
         return jsonResponse(response.status, {
           requestId: request?.request_id,
-          signingUrl: action?.signing_url,
+          signingUrl: publicRespAction?.signing_url,
         });
       }
     }
@@ -495,7 +672,8 @@ export default async function handler(req: Request) {
       status: response.status,
       headers: JSON_NO_STORE_HEADERS,
     });
-  } catch {
+  } catch (err) {
+    console.error('[zoho] handler error', err && err.stack ? err.stack : err);
     logResponse(500);
     return jsonResponse(500, {
       error: 'Internal Server Error',

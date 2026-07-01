@@ -15,7 +15,7 @@ const PRIVATE_JSON_HEADERS: HeadersInit = {
 const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
 const PUBLIC_FORM_SELECT = 'id,name,slug,landing_config';
 const PRIVATE_FORM_SELECT = `
-  id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,
+  id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,signer_config,
   form_qrcodes(stable_id, created_at)
 `;
 
@@ -27,6 +27,11 @@ function isValidSlug(slug: unknown): slug is string {
 
 function isMissingPublicFormColumnError(error: any): boolean {
   return String(error?.message || '').includes('landing_config');
+}
+
+function isMissingPrivateFormColumnError(error: any): boolean {
+  const msg = String(error?.message || '');
+  return msg.includes('landing_config') || msg.includes('form_qrcodes') || msg.includes('signer_config');
 }
 
 async function findSlugAlias(oldSlug: string): Promise<{ data: { form_id: string } | null; error: any }> {
@@ -64,7 +69,7 @@ async function findPublicFormBy(column: 'slug' | 'id', value: string) {
 function toCamel(record: any, options?: { publicView?: boolean }) {
   if (!record) return record;
   const publicView = options?.publicView === true;
-  
+
   // Convert snake_case landing_config keys to camelCase
   let landingConfig = record.landing_config;
   if (landingConfig && typeof landingConfig === 'object') {
@@ -95,7 +100,24 @@ function toCamel(record: any, options?: { publicView?: boolean }) {
       buttonText: landingConfig.button_text
     };
   }
-  
+
+  // Convert snake_case signer_config keys to camelCase (private view only).
+  let signerConfig: any = record.signer_config;
+  if (!publicView && signerConfig && typeof signerConfig === 'object') {
+    const roles = Array.isArray(signerConfig.roles) ? signerConfig.roles.map((r: any) => ({
+      role: r.role,
+      actionType: r.action_type,
+      recipientName: r.recipient_name,
+      recipientEmail: r.recipient_email,
+      deliveryMode: r.delivery_mode,
+      isPublic: r.is_public,
+    })) : [];
+    signerConfig = {
+      notes: signerConfig.notes,
+      roles,
+    };
+  }
+
   return {
     id: record.id,
     ...(publicView ? {} : { userId: record.user_id }),
@@ -113,6 +135,7 @@ function toCamel(record: any, options?: { publicView?: boolean }) {
       createdAt: record.created_at ? Date.parse(record.created_at as any) : null,
     }),
     landingConfig: landingConfig || undefined,
+    ...(publicView ? {} : { signerConfig: signerConfig || undefined }),
     ...(publicView ? {} : {
       qrStableIdFromDb: record.form_qrcodes?.[0]?.stable_id,
       qrCreatedAt: record.form_qrcodes?.[0]?.created_at,
@@ -187,8 +210,8 @@ export default async function handler(req: Request) {
       data = result.data;
       error = result.error;
       
-      // If error mentions landing_config or form_qrcodes, retry with basic columns only
-      if (error?.message?.includes('landing_config') || error?.message?.includes('form_qrcodes')) {
+      // If error mentions landing_config, form_qrcodes, or signer_config, retry with basic columns only
+      if (isMissingPrivateFormColumnError(error)) {
         const fallbackResult = await supabaseServer
           .from(table)
           .select('id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at')
@@ -278,6 +301,26 @@ export default async function handler(req: Request) {
         button_text: landingConfig.buttonText
       };
     }
+
+    // Convert camelCase signerConfig to snake_case for database.
+    // Public signer role (is_public) is stripped — it is collected at submit time.
+    let signerConfig = body.signerConfig;
+    if (signerConfig && typeof signerConfig === 'object') {
+      const roles = Array.isArray(signerConfig.roles) ? signerConfig.roles
+        .filter((r: any) => r && !r.isPublic)
+        .map((r: any) => ({
+          role: r.role,
+          action_type: r.actionType,
+          recipient_name: r.recipientName,
+          recipient_email: r.recipientEmail,
+          delivery_mode: r.deliveryMode,
+          is_public: false,
+        })) : [];
+      signerConfig = {
+        notes: signerConfig.notes,
+        roles,
+      };
+    }
     
     // P2-03: For new forms, omit id and created_at — the DB generates both.
     // For updates (body.id present), use a separate UPDATE path scoped to user_id.
@@ -323,6 +366,9 @@ export default async function handler(req: Request) {
       };
       if (landingConfig) {
         updateRecord.landing_config = landingConfig;
+      }
+      if (signerConfig) {
+        updateRecord.signer_config = signerConfig;
       }
 
       const { data, error } = await supabaseServer
@@ -377,6 +423,9 @@ export default async function handler(req: Request) {
     };
     if (landingConfig) {
       insertRecord.landing_config = landingConfig;
+    }
+    if (signerConfig) {
+      insertRecord.signer_config = signerConfig;
     }
 
     const { data, error } = await supabaseServer

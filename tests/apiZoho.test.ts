@@ -11,6 +11,27 @@ const state = vi.hoisted(() => ({
       role_name: 'Employee',
       api_domain: 'https://sign.zoho.com',
     },
+    {
+      id: 'form-2',
+      user_id: 'user-1',
+      slug: 'multi',
+      template_id: 'tpl-2',
+      role_name: 'Customer',
+      api_domain: 'https://sign.zoho.com',
+      signer_config: {
+        notes: 'Please review carefully',
+        roles: [
+          {
+            role: 'Approver',
+            action_type: 'APPROVER',
+            recipient_name: 'Jane Reviewer',
+            recipient_email: 'jane@example.com',
+            delivery_mode: 'email',
+            is_public: false,
+          },
+        ],
+      },
+    },
   ],
   formSlugAliases: [
     { form_id: 'form-1', old_slug: 'old-fbmc' },
@@ -53,7 +74,9 @@ const makeQueryBuilder = (table: string) => {
 vi.mock('../api/_supabaseServer.js', () => ({
   supabaseServer: {
     auth: {
-      getUser: vi.fn().mockImplementation(async () => ({
+      // Impl passed directly to vi.fn so it survives vi.restoreAllMocks() in
+      // beforeEach (chained mockImplementation() would be reset to undefined).
+      getUser: vi.fn(async () => ({
         data: { user: state.authUser },
         error: state.authUser ? null : 'no auth',
       })),
@@ -242,5 +265,125 @@ describe('/api/zoho', () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ requestId: 'request-1' });
+  });
+
+  it('builds a multi-action payload from template roles and signer_config', async () => {
+    state.credentials = {
+      zoho_client_id: 'stored-client',
+      zoho_client_secret: 'stored-secret',
+      zoho_refresh_token: 'stored-refresh',
+    };
+
+    const fetchMock = vi.fn()
+      // OAuth token refresh
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'oauth-token' }), { status: 200 }))
+      // Template lookup: two roles (Customer = public, Approver = configured)
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        templates: {
+          actions: [
+            { role: 'Customer', action_id: 'cust-action', action_type: 'SIGN' },
+            { role: 'Approver', action_id: 'appr-action', action_type: 'APPROVER' },
+          ],
+        }
+      }), { status: 200 }))
+      // createdocument response
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        requests: {
+          request_id: 'request-2',
+          actions: [
+            { role: 'Customer', action_id: 'cust-action' },
+            { role: 'Approver', action_id: 'appr-action' },
+          ],
+        }
+      }), { status: 200 }))
+      // embed token for the public (Customer) action
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sign_url: 'https://sign.example/cust' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Public submit (no auth header) — exercises the minimal public response
+    // path while still building the multi-action payload from signer_config.
+    const req = new Request('http://localhost/api/zoho', {
+      method: 'POST',
+      body: JSON.stringify({
+        formId: 'form-2',
+        slug: 'multi',
+        signer: { name: 'Bob', email: 'bob@test.com' },
+      })
+    });
+
+    const res = await handler(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ requestId: 'request-2', signingUrl: 'https://sign.example/cust' });
+
+    const createdocumentPayload = JSON.parse(fetchMock.mock.calls[2][1].body);
+    const actions = createdocumentPayload.templates.actions;
+    expect(actions).toHaveLength(2);
+
+    const customerAction = actions.find((a: any) => a.role === 'Customer');
+    expect(customerAction.recipient_name).toBe('Bob');
+    expect(customerAction.recipient_email).toBe('bob@test.com');
+    expect(customerAction.is_embedded).toBe(true);
+
+    const approverAction = actions.find((a: any) => a.role === 'Approver');
+    expect(approverAction.recipient_name).toBe('Jane Reviewer');
+    expect(approverAction.recipient_email).toBe('jane@example.com');
+    expect(approverAction.action_type).toBe('APPROVER');
+    expect(approverAction.is_embedded).toBe(false);
+
+    expect(createdocumentPayload.templates.notes).toBe('Please review carefully');
+
+    // embedtoken should be requested for the public Customer action only
+    expect(fetchMock.mock.calls[3][0]).toContain('cust-action');
+  });
+
+  it('returns template roles for an authenticated admin (action=template)', async () => {
+    state.authUser = { id: 'user-1' };
+    state.credentials = {
+      zoho_client_id: 'stored-client',
+      zoho_client_secret: 'stored-secret',
+      zoho_refresh_token: 'stored-refresh',
+    };
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: 'oauth-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        templates: {
+          actions: [
+            { role: 'Customer', action_id: 'cust-action', action_type: 'SIGN' },
+            { role: 'Approver', action_id: 'appr-action', action_type: 'APPROVER' },
+          ],
+        }
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const req = new Request('http://localhost/api/zoho', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer user-token' },
+      body: JSON.stringify({ action: 'template', formId: 'form-2' })
+    });
+
+    const res = await handler(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.templateId).toBe('tpl-2');
+    expect(body.roleName).toBe('Customer');
+    expect(body.roles).toHaveLength(2);
+    expect(body.roles.find((r: any) => r.role === 'Customer').isPublic).toBe(true);
+    expect(body.roles.find((r: any) => r.role === 'Approver').isPublic).toBe(false);
+    expect(body.roles.find((r: any) => r.role === 'Approver').actionType).toBe('APPROVER');
+  });
+
+  it('rejects template role fetch without authentication', async () => {
+    // Use a fresh formId so the request isn't blocked by the per-form rate
+    // limit (5/min) exhausted by earlier form-1 tests in this file.
+    const req = new Request('http://localhost/api/zoho', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'template', formId: 'form-noauth' })
+    });
+    const res = await handler(req);
+    expect(res.status).toBe(401);
   });
 });
