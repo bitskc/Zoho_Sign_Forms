@@ -10,7 +10,7 @@ import { validateContrast, validateAltText, KeyCodes, handleEnterOrSpace, getRel
 
 
 // Reserved slugs that cannot be used for forms
-const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed', 'guides'];
 
 // Validate slug format and check against reserved words
 const isValidSlug = (slug: string): boolean => {

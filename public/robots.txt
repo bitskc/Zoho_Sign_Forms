@@ -5,4 +5,4 @@ Disallow: /api/
 Disallow: /dashboard/
 Disallow: /admin/
 
-Sitemap: https://signflow.ink/sitemap.xml
+Sitemap: https://www.signflow.ink/sitemap.xml

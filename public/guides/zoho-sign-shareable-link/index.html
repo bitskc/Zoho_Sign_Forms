@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-5GMVHV6M');</script>
+  <title>How to Create a Shareable Link for a Zoho Sign Template (2026 Guide)</title>
+  <meta name="description" content="Zoho Sign doesn't give most plans a permanent shareable signing link. Here are your options — including how to turn any template into a reusable URL in 5 minutes.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.signflow.ink/guides/zoho-sign-shareable-link">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://www.signflow.ink/guides/zoho-sign-shareable-link">
+  <meta property="og:title" content="How to Create a Shareable Link for a Zoho Sign Template">
+  <meta property="og:description" content="Turn any Zoho Sign template into a permanent URL anyone can sign — no Enterprise plan required.">
+  <meta property="og:image" content="https://www.signflow.ink/og-image.svg">
+  <meta property="og:site_name" content="SignFlow Pro">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to create a shareable link for a Zoho Sign template",
+    "description": "Turn a Zoho Sign template into a permanent shareable signing URL using SignFlow Pro.",
+    "totalTime": "PT5M",
+    "step": [
+      {"@type": "HowToStep", "name": "Enable API access in Zoho Sign", "text": "In Zoho Sign, make sure your plan has API access enabled and create a client ID and secret in the Zoho API console."},
+      {"@type": "HowToStep", "name": "Connect your Zoho Sign account to SignFlow Pro", "text": "Sign up at signflow.ink and paste your Zoho API credentials. Credentials are encrypted at rest."},
+      {"@type": "HowToStep", "name": "Pick a template", "text": "SignFlow Pro lists your existing Zoho Sign templates. Choose the one you want to share and which signer role the public link fills."},
+      {"@type": "HowToStep", "name": "Publish your link", "text": "SignFlow Pro generates a permanent URL like signflow.ink/your-form. Anyone who opens it enters their name and email and signs — no Zoho account needed."}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type": "Question", "name": "Does Zoho Sign have shareable signing links on standard plans?", "acceptedAnswer": {"@type": "Answer", "text": "Zoho Sign's native public-form feature (SignForms) is limited to its top-tier plan. On other plans, each envelope must be sent to a named recipient. Third-party tools like SignFlow Pro use the Zoho Sign API to provide permanent shareable links on any API-enabled plan."}},
+      {"@type": "Question", "name": "Do signers need a Zoho account to sign via a shared link?", "acceptedAnswer": {"@type": "Answer", "text": "No. With a SignFlow Pro link, signers enter their name and email on a branded page and sign directly through Zoho Sign's signing flow. No account or login is required."}},
+      {"@type": "Question", "name": "What does a shareable Zoho Sign link cost?", "acceptedAnswer": {"@type": "Answer", "text": "SignFlow Pro is $60/year flat, plus Zoho's standard API rate of $0.50 per document sent. There are no per-user fees."}}
+    ]
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#020617; --panel:#0f172a; --border:#1e293b; --text:#e2e8f0; --muted:#94a3b8; --accent:#10b981; --accent-hover:#34d399; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); line-height:1.7; }
+    a { color:var(--accent); text-decoration:none; } a:hover { color:var(--accent-hover); }
+    .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
+    header.site { border-bottom:1px solid var(--border); padding:16px 0; }
+    header.site .wrap { display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight:700; font-size:18px; color:#fff; } .logo span { color:var(--accent); }
+    nav a { color:var(--muted); font-size:14px; font-weight:600; margin-left:20px; }
+    nav a.cta { background:var(--accent); color:#020617; padding:8px 16px; border-radius:8px; }
+    nav a.cta:hover { background:var(--accent-hover); color:#020617; }
+    main { padding:56px 0 72px; }
+    .crumb { font-size:13px; color:#64748b; margin-bottom:20px; }
+    h1 { font-size:32px; line-height:1.25; color:#fff; margin-bottom:16px; }
+    h2 { font-size:22px; color:#fff; margin:40px 0 12px; }
+    h3 { font-size:17px; color:#fff; margin:24px 0 8px; }
+    p, li { color:var(--text); margin-bottom:14px; font-size:16px; }
+    ul, ol { padding-left:24px; margin-bottom:16px; }
+    .lede { font-size:18px; color:var(--muted); }
+    .note { background:var(--panel); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:16px 20px; margin:20px 0; font-size:15px; color:var(--muted); }
+    table { width:100%; border-collapse:collapse; margin:20px 0; font-size:15px; }
+    th, td { border:1px solid var(--border); padding:10px 12px; text-align:left; }
+    th { background:var(--panel); color:#fff; }
+    .cta-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:32px; text-align:center; margin-top:48px; }
+    .cta-box h2 { margin-top:0; }
+    .cta-box p { color:var(--muted); margin-bottom:20px; }
+    .btn { display:inline-block; background:var(--accent); color:#020617; font-weight:600; padding:12px 24px; border-radius:8px; }
+    .btn:hover { background:var(--accent-hover); color:#020617; }
+    footer.site { border-top:1px solid var(--border); padding:24px 0; color:#64748b; font-size:13px; }
+    footer.site .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  </style>
+</head>
+<body>
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5GMVHV6M" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <header class="site"><div class="wrap">
+    <a class="logo" href="/">SignFlow <span>Pro</span></a>
+    <nav><a href="/guides">Guides</a><a href="/#/admin/login">Sign in</a><a class="cta" href="/#/admin/signup">Get started — $60/yr</a></nav>
+  </div></header>
+  <main><div class="wrap">
+    <p class="crumb"><a href="/guides">Guides</a> / Shareable links</p>
+    <h1>How to create a shareable link for a Zoho Sign template</h1>
+    <p class="lede">You have a document people sign over and over — a client agreement, a liability waiver, an intake form. Sending a fresh Zoho Sign request to every single person is slow. What you want is one permanent link you can put in an email signature, on your website, or behind a QR code. Here's how to get one.</p>
+
+    <h2>The problem: Zoho Sign requests are one-to-one</h2>
+    <p>Out of the box, Zoho Sign works like a mail merge: you pick a template, type in the recipient's name and email, and send. That's fine for contracts you negotiate individually. It breaks down when the <em>signer</em> should initiate — walk-in customers, new hires, event attendees, patients, rental applicants.</p>
+    <p>Zoho's native answer is <strong>SignForms</strong>, but it's gated to the top-tier plan. If you're on a lower plan, the choices are: upgrade every user to Enterprise, or use the Zoho Sign API.</p>
+
+    <h2>Your three options</h2>
+    <table>
+      <tr><th>Option</th><th>Cost</th><th>Effort</th></tr>
+      <tr><td>Upgrade to Zoho Sign Enterprise for SignForms</td><td>Per-user, per-month — grows with your team</td><td>None, but you pay for features you may not need</td></tr>
+      <tr><td>Build against the Zoho Sign API yourself</td><td>Developer time + hosting</td><td>Days to weeks; you maintain it forever</td></tr>
+      <tr><td>Use SignFlow Pro</td><td>$60/year flat + Zoho's $0.50/doc API rate</td><td>About 5 minutes</td></tr>
+    </table>
+
+    <h2>Creating a shareable link with SignFlow Pro</h2>
+    <h3>Step 1 — Enable API access in Zoho Sign</h3>
+    <p>Your Zoho Sign plan needs API access. In the Zoho API console, create a client (a client ID and secret). This is a one-time setup.</p>
+    <h3>Step 2 — Connect your account</h3>
+    <p>Create a SignFlow Pro account at <a href="https://www.signflow.ink/">signflow.ink</a> and paste in your Zoho credentials. They're encrypted at rest, and all signing still happens through Zoho's own infrastructure — SignFlow Pro never touches your signed documents.</p>
+    <h3>Step 3 — Pick a template and a signer role</h3>
+    <p>SignFlow Pro lists the templates already in your Zoho Sign account. Choose one, pick which signer role the public link should fill (multi-role templates are supported — you can route the other roles by email automatically), and customize the landing page with your logo and colors if you like.</p>
+    <h3>Step 4 — Publish and share</h3>
+    <p>You get a permanent URL like <code>signflow.ink/your-form-name</code> — plus a matching print-ready QR code. Anyone who opens the link enters their name and email and signs. The link never expires and never needs re-sending.</p>
+
+    <div class="note">Every link comes with built-in analytics: visits, submissions, and conversion rate, so you know whether the people you're pointing at the form actually finish it.</div>
+
+    <h2>What signers see</h2>
+    <p>A clean, branded page with your logo, the form name, and two fields: name and email. They click through into Zoho Sign's standard signing flow. <strong>No Zoho account, no signup, no app download.</strong> When they finish, the completed document lands in your Zoho Sign account like any other envelope.</p>
+
+    <h2>Related guides</h2>
+    <ul>
+      <li><a href="/guides/zoho-sign-qr-code">How to create a QR code for a Zoho Sign document</a></li>
+      <li><a href="/guides/zoho-sign-without-account">How to let anyone sign without a Zoho account</a></li>
+      <li><a href="/guides/docusign-powerforms-alternative">A DocuSign PowerForms alternative for Zoho Sign users</a></li>
+    </ul>
+
+    <div class="cta-box">
+      <h2>One link. Any template. Five minutes.</h2>
+      <p>SignFlow Pro is $60/year flat — analytics, branded pages, and QR codes included. No per-user fees, no Enterprise upgrade.</p>
+      <a class="btn" href="/#/admin/signup">Create your first signing link</a>
+    </div>
+  </div></main>
+  <footer class="site"><div class="wrap">
+    <span>© 2026 SignFlow Pro</span>
+    <span><a href="/">Home</a> · <a href="/guides">Guides</a></span>
+  </div></footer>
+</body>
+</html>

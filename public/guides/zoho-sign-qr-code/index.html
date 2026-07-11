@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-5GMVHV6M');</script>
+  <title>How to Create a QR Code for a Zoho Sign Document (Print-Ready)</title>
+  <meta name="description" content="Put a QR code on a poster, clipboard, or job site sign and collect legally binding Zoho Sign signatures on the spot. Here's how to set it up in 5 minutes.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.signflow.ink/guides/zoho-sign-qr-code">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://www.signflow.ink/guides/zoho-sign-qr-code">
+  <meta property="og:title" content="How to Create a QR Code for a Zoho Sign Document">
+  <meta property="og:description" content="Print-ready QR codes for waivers, intake forms, and work authorizations — scan, sign, done.">
+  <meta property="og:image" content="https://www.signflow.ink/og-image.svg">
+  <meta property="og:site_name" content="SignFlow Pro">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to create a QR code for a Zoho Sign document",
+    "description": "Generate a permanent, print-ready QR code that opens a Zoho Sign template for signing.",
+    "totalTime": "PT5M",
+    "step": [
+      {"@type": "HowToStep", "name": "Connect Zoho Sign to SignFlow Pro", "text": "Create a SignFlow Pro account and connect your Zoho Sign API credentials."},
+      {"@type": "HowToStep", "name": "Turn a template into a public form", "text": "Pick the Zoho Sign template you want people to sign and publish it as a permanent signing link."},
+      {"@type": "HowToStep", "name": "Download the QR code", "text": "SignFlow Pro generates a print-ready QR code for every form. Download it and place it on posters, clipboards, counters, or signage."},
+      {"@type": "HowToStep", "name": "Signers scan and sign", "text": "Scanning opens the branded signing page on their phone. They enter name and email and sign through Zoho Sign — no account needed."}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type": "Question", "name": "Can Zoho Sign generate a QR code for a document?", "acceptedAnswer": {"@type": "Answer", "text": "Zoho Sign does not generate permanent QR codes for templates on most plans. SignFlow Pro adds this on top of any API-enabled Zoho Sign plan: every shareable form gets a stable, print-ready QR code."}},
+      {"@type": "Question", "name": "What happens if I reprint or move the QR code?", "acceptedAnswer": {"@type": "Answer", "text": "SignFlow Pro QR codes use a stable redirect ID, so the printed code keeps working even if you rename the form or change its URL slug. You never have to reprint signage because of a settings change."}},
+      {"@type": "Question", "name": "Are signatures collected via QR code legally binding?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The QR code simply opens Zoho Sign's standard signing flow, so completed documents carry the same audit trail and legal validity as any other Zoho Sign envelope."}}
+    ]
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#020617; --panel:#0f172a; --border:#1e293b; --text:#e2e8f0; --muted:#94a3b8; --accent:#10b981; --accent-hover:#34d399; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); line-height:1.7; }
+    a { color:var(--accent); text-decoration:none; } a:hover { color:var(--accent-hover); }
+    .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
+    header.site { border-bottom:1px solid var(--border); padding:16px 0; }
+    header.site .wrap { display:flex; align-items:center; justify-content:space-between; }
+    .logo { font-weight:700; font-size:18px; color:#fff; } .logo span { color:var(--accent); }
+    nav a { color:var(--muted); font-size:14px; font-weight:600; margin-left:20px; }
+    nav a.cta { background:var(--accent); color:#020617; padding:8px 16px; border-radius:8px; }
+    nav a.cta:hover { background:var(--accent-hover); color:#020617; }
+    main { padding:56px 0 72px; }
+    .crumb { font-size:13px; color:#64748b; margin-bottom:20px; }
+    h1 { font-size:32px; line-height:1.25; color:#fff; margin-bottom:16px; }
+    h2 { font-size:22px; color:#fff; margin:40px 0 12px; }
+    h3 { font-size:17px; color:#fff; margin:24px 0 8px; }
+    p, li { color:var(--text); margin-bottom:14px; font-size:16px; }
+    ul, ol { padding-left:24px; margin-bottom:16px; }
+    .lede { font-size:18px; color:var(--muted); }
+    .note { background:var(--panel); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:16px 20px; margin:20px 0; font-size:15px; color:var(--muted); }
+    .cta-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:32px; text-align:center; margin-top:48px; }
+    .cta-box h2 { margin-top:0; }
+    .cta-box p { color:var(--muted); margin-bottom:20px; }
+    .btn { display:inline-block; background:var(--accent); color:#020617; font-weight:600; padding:12px 24px; border-radius:8px; }
+    .btn:hover { background:var(--accent-hover); color:#020617; }
+    footer.site { border-top:1px solid var(--border); padding:24px 0; color:#64748b; font-size:13px; }
+    footer.site .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  </style>
+</head>
+<body>
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5GMVHV6M" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <header class="site"><div class="wrap">
+    <a class="logo" href="/">SignFlow <span>Pro</span></a>
+    <nav><a href="/guides">Guides</a><a href="/#/admin/login">Sign in</a><a class="cta" href="/#/admin/signup">Get started — $60/yr</a></nav>
+  </div></header>
+  <main><div class="wrap">
+    <p class="crumb"><a href="/guides">Guides</a> / QR codes</p>
+    <h1>How to create a QR code for a Zoho Sign document</h1>
+    <p class="lede">The fastest way to collect a signature from someone standing in front of you isn't email — it's a QR code they scan with the phone already in their hand. Here's how to turn any Zoho Sign template into a print-ready QR code that works on posters, clipboards, counters, and job-site signage.</p>
+
+    <h2>Where signing QR codes earn their keep</h2>
+    <ul>
+      <li><strong>Waivers &amp; releases</strong> — gyms, rentals, events, activity businesses. Scan at the front desk, sign before you start.</li>
+      <li><strong>Work authorizations</strong> — field service and contracting. The customer signs the estimate approval at the kitchen table, on their own phone.</li>
+      <li><strong>Intake forms</strong> — clinics, law offices, salons. The clipboard becomes a placard with a QR code.</li>
+      <li><strong>HR paperwork</strong> — onboarding packets and policy acknowledgments posted in the break room.</li>
+      <li><strong>Open houses &amp; events</strong> — sign-in sheets and NDAs without a laptop station.</li>
+    </ul>
+
+    <h2>The setup (about 5 minutes)</h2>
+    <h3>Step 1 — Connect Zoho Sign</h3>
+    <p>Create a <a href="https://www.signflow.ink/">SignFlow Pro</a> account and connect your Zoho Sign API credentials (any plan with API access works — no Enterprise upgrade required).</p>
+    <h3>Step 2 — Publish a template as a public form</h3>
+    <p>Pick the template, choose which signer role the public fills, and optionally brand the landing page with your logo and colors.</p>
+    <h3>Step 3 — Download the QR code</h3>
+    <p>Every form comes with a print-ready QR code. Drop it into a flyer, table tent, yard sign, or laminated counter card.</p>
+    <h3>Step 4 — People scan and sign</h3>
+    <p>The code opens your branded signing page. Signers enter their name and email and complete the document through Zoho Sign's standard flow — full audit trail, legally binding, and <strong>no Zoho account required</strong>.</p>
+
+    <div class="note"><strong>Reprint-proof:</strong> SignFlow Pro QR codes point at a stable redirect ID, not the form's display URL. Rename the form or change its slug later — the printed code keeps working. You'll never have to chase down and replace old signage.</div>
+
+    <h2>Know if the signage is working</h2>
+    <p>Each form tracks visits, submissions, and conversion rate. If the poster at location A gets 40 scans and 35 signatures while location B gets 3 scans, you know where to fix the placement — this is the difference between a QR code and a QR code <em>program</em>.</p>
+
+    <h2>Related guides</h2>
+    <ul>
+      <li><a href="/guides/zoho-sign-shareable-link">How to create a shareable link for a Zoho Sign template</a></li>
+      <li><a href="/guides/zoho-sign-without-account">How to let anyone sign without a Zoho account</a></li>
+    </ul>
+
+    <div class="cta-box">
+      <h2>Print it once. Collect signatures forever.</h2>
+      <p>SignFlow Pro is $60/year flat — permanent links, print-ready QR codes, branded pages, and analytics included.</p>
+      <a class="btn" href="/#/admin/signup">Get your QR code</a>
+    </div>
+  </div></main>
+  <footer class="site"><div class="wrap">
+    <span>© 2026 SignFlow Pro</span>
+    <span><a href="/">Home</a> · <a href="/guides">Guides</a></span>
+  </div></footer>
+</body>
+</html>

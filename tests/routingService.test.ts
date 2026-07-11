@@ -69,7 +69,7 @@ describe('routingService.getRouteContext', () => {
   });
 
   it('does not treat reserved paths as form slugs', () => {
-    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc', '/embed']) {
+    for (const path of ['/admin', '/assets', '/static', '/public', '/_next', '/favicon.ico', '/qr/abc', '/embed', '/guides']) {
       mockLocation(`https://www.signflow.ink${path}`);
       const ctx = getRouteContext();
       expect(ctx.isFormSlug).toBe(false);
@@ -107,6 +107,7 @@ describe('routingService public form slug helpers', () => {
     expect(isValidPublicFormSlug('admin')).toBe(false);
     expect(isValidPublicFormSlug('qr')).toBe(false);
     expect(isValidPublicFormSlug('embed')).toBe(false);
+    expect(isValidPublicFormSlug('guides')).toBe(false);
     expect(isValidPublicFormSlug('favicon.ico')).toBe(false);
   });
 });

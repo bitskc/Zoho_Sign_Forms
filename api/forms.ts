@@ -12,7 +12,7 @@ const PRIVATE_JSON_HEADERS: HeadersInit = {
   'Cache-Control': 'private, no-store',
 };
 
-const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed'];
+const RESERVED_SLUGS = ['api', 'admin', 'assets', 'static', 'public', '_next', 'favicon.ico', 'qr', 'embed', 'guides'];
 const PUBLIC_FORM_SELECT = 'id,name,slug,landing_config';
 const PRIVATE_FORM_SELECT = `
   id,user_id,name,slug,template_id,role_name,api_domain,qr_stable_id,created_at,landing_config,signer_config,

@@ -68,7 +68,7 @@ describe('API Forms - URL Validation Integration', () => {
     expect(true).toBe(true); // Placeholder - actual validation tested in urlValidator.test.ts
   });
 
-  it.each(['embed', 'api', 'admin', 'qr'])('rejects reserved slug %s before database writes', async (reservedSlug) => {
+  it.each(['embed', 'api', 'admin', 'qr', 'guides'])('rejects reserved slug %s before database writes', async (reservedSlug) => {
     const req = new Request('https://www.signflow.ink/api/forms', {
       method: 'POST',
       headers: {
