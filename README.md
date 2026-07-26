@@ -1,40 +1,44 @@
 # SignFlow Pro
 
-**Shareable links and QR codes for your Zoho Sign templates.**
+<img src="screenshot.png" alt="SignFlow Pro landing page" width="600">
 
-Turn any Zoho Sign template into a permanent, shareable URL or QR code. Signers click the link, enter their name and email, and sign your document — no Zoho account required.
+Turn any Zoho Sign template into a permanent, shareable URL or QR code. Signers click the link, enter their name and email, and sign — no Zoho account, no friction, no per-user fees.
 
-🔗 **Live:** [signflow.ink](https://signflow.ink)
+**Live at [signflow.ink](https://signflow.ink)** · $60/year flat.
 
-## Features
+## Why this exists
 
-- **Permanent signing links** — one URL that works forever, for unlimited signers
-- **QR codes** — print-ready codes for posters, cards, and handouts
-- **Branded landing pages** — your logo, colors, and company info
-- **Analytics** — track visits, submissions, and conversion rates
-- **5-minute setup** — connect Zoho Sign, pick a template, share
+Zoho Sign is powerful but built for the person *sending* documents, not the person *signing* them. Every signer needs a Zoho account, or you're manually emailing each one. For businesses that collect signatures from the public — waivers, intake forms, contracts — that friction kills conversion.
 
-## Tech Stack
+SignFlow sits in front of Zoho Sign and gives you a permanent link you can put on a website, a QR code on a counter, or an email. The signer never sees Zoho. They see your branded page, they sign, they're done.
 
-- React 19 + TypeScript + Vite
-- Vercel Edge Functions (API)
-- Supabase (auth, database)
-- Zoho Sign API
+## What it does
 
-## Development
+- **Permanent signing links** — one URL per template, works forever, unlimited signers
+- **QR codes** — print-ready, generated automatically for each link
+- **Branded landing pages** — your logo, your colors, your domain
+- **Analytics** — visits, submissions, conversion rates per link
+- **Multi-role support** — templates with multiple signers, each gets their own step
+- **Stripe billing** — subscription management with webhook-idempotent handling
+
+## How it's built
+
+- **React 19 + TypeScript + Vite** — single-page app, no SSR needed
+- **Vercel Edge Functions** — API routes for Zoho OAuth, Stripe webhooks, link management
+- **Supabase** — auth, Postgres database, row-level security
+- **Zoho Sign API** — multi-region OAuth, credentials stay server-side
+- **Stripe** — signature verification + replay protection on webhooks
+
+The interesting part is the Zoho OAuth flow — it handles multiple Zoho data regions (US, EU, IN, AU) with per-tenant credential storage, and the signing session is entirely server-mediated so credentials never reach the browser.
+
+## Run it locally
 
 ```bash
 npm install
-cp .env.local.example .env.local  # Add your keys
-npm run dev                        # Frontend on :5173
-npm run dev:vercel                 # API on :3001
-npm run dev:full                   # Both
-npm test                           # Run tests
+cp .env.local.example .env.local   # Add your Zoho + Supabase + Stripe keys
+npm run dev:full                    # Frontend on :5173, API on :3001
+npm test                            # Vitest
 ```
-
-## Deployment
-
-Deployed on Vercel. Push to `main` to deploy.
 
 ## License
 
