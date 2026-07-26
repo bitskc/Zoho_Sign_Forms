@@ -376,7 +376,7 @@ Admins cannot preview landing page changes before saving. Changes are applied im
 **Owner:** DevOps + Security
 
 **Status:**
-- ✅ `.env` is gitignored ([.gitignore](https://github.com/bitskc/Zoho_Sign_Forms/blob/development/.gitignore#L14))
+- ✅ `.env` is gitignored ([.gitignore](https://github.com/bitskc/SignFlow-for-Zoho/blob/development/.gitignore#L14))
 - ✅ No `.env` files found in repo
 - ✅ Environment variables loaded via Vite: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 - ✅ Server env vars loaded in [api/_supabaseServer.ts](api/_supabaseServer.ts): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`
